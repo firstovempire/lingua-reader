@@ -15,6 +15,8 @@ create table if not exists public.items (
   primary key (user_id, kind, id)
 );
 alter table public.items enable row level security;
+grant select, insert, update, delete on public.items to authenticated;
+revoke all on public.items from anon;
 drop policy if exists "own items" on public.items;
 create policy "own items" on public.items for all to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
