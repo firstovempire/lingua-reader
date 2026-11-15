@@ -4,7 +4,7 @@
 // Публичный ключ безопасен: доступ к данным закрыт правилами базы (RLS).
 // Если оставить пустым — сайт работает в локальном режиме (без входа, ключ в браузере, нужен VPN).
 window.LR_CONFIG = {
-  SUPABASE_URL: "",
-  SUPABASE_KEY: "",
+  SUPABASE_URL: "https://cbxhdemmwxzmksuthzue.supabase.co",
+  SUPABASE_KEY: "sb_publishable_ZBNrZLT0Q-g0quVo5JdWIg_UvR-qSyv",
   REGION: "eu-west-3" // Париж: отсюда сервер ходит в Google
 };
