@@ -20,6 +20,8 @@ const MAX_PROMPT = 16000;
 // Запасные модели: когда у одной кончился бесплатный лимит (429), пробуем следующую.
 // Список берём у Google для этого ключа (кэш на 6 часов), лёгкие «lite» — первыми.
 const modelCache = new Map<string, { at: number; list: string[] }>();
+// какой вариант настроек подошёл каждой модели (чтобы не перебирать каждый раз)
+const goodVariant = new Map<string, number>();
 // модели, у которых недавно кончился лимит: не дёргаем их 30 минут
 const exhausted = new Map<string, number>();
 const isOut = (key: string, m: string) => (exhausted.get(key.slice(-8) + '|' + m) ?? 0) > Date.now();
@@ -83,16 +85,28 @@ Deno.serve(async (req) => {
 
   // 5. запрос к Gemini (стриминг) с переключением моделей при исчерпании лимита
   const urlFor = (m: string) => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:streamGenerateContent?alt=sse`;
-  const body = (noThinking: boolean) => JSON.stringify({
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: { responseMimeType: "application/json", temperature: 0.2, ...(noThinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}) },
-  });
-  const call = (m: string, noThinking: boolean) => fetch(urlFor(m), {
-    method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": sec.api_key }, body: body(noThinking),
+  // Разные модели принимают разные настройки. Пробуем от «быстрой» к «самой простой»,
+  // переходя к следующему варианту только при ошибке 400 (недопустимый параметр).
+  const VARIANTS: Record<string, unknown>[] = [
+    { responseMimeType: "application/json", temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } },
+    { responseMimeType: "application/json", temperature: 0.2, thinkingConfig: { thinkingLevel: "minimal" } },
+    { responseMimeType: "application/json", temperature: 0.2 },
+    { temperature: 0.2 },
+    {},
+  ];
+  const body = (v: number) => JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: VARIANTS[v] });
+  const call = (m: string, v: number) => fetch(urlFor(m), {
+    method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": sec.api_key }, body: body(v),
   });
   const tryModel = async (m: string) => {
-    let r = await call(m, true);
-    if (r.status === 400) { const t = await r.clone().text(); if (/thinking/i.test(t)) r = await call(m, false); }
+    let v = goodVariant.get(m) ?? 0;
+    let r = await call(m, v);
+    while (r.status === 400 && v < VARIANTS.length - 1) {
+      const t = await r.text().catch(() => "");
+      if (/api key/i.test(t)) return new Response(t, { status: 400 });
+      v++; r = await call(m, v);
+    }
+    if (r.ok) goodVariant.set(m, v);
     return r;
   };
 

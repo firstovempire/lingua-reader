@@ -250,7 +250,7 @@ async function geminiInner(prompt, signal, onPartial, key, arm) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(S.model)}:streamGenerateContent?alt=sse`;
   const body = t => JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: Object.assign({ responseMimeType: 'application/json', temperature: 0.2 }, t ? { thinkingConfig: { thinkingBudget: 0 } } : {}) });
   const post = t => fetch(url, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: body(t) });
-  try { r = await post(true); if (r.status === 400) { const t = await r.clone().text(); if (/thinking/i.test(t)) r = await post(false); } }
+  try { r = await post(true); if (r.status === 400) { const t = await r.clone().text(); if (!/api key/i.test(t)) r = await post(false); } }
   catch (e) { if (e.name === 'AbortError') throw e; throw new Error('Нет связи с Google (' + (e.message || 'network') + '). ' + NET_HINT); }
   arm();
   if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(apiError(r.status, d)); }
