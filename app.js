@@ -50,8 +50,10 @@ let user = null, keyLast4 = '', lastRegion = '', lastModel = '', loggedFor = '';
 const REGION_NAMES = { 'eu-west-3': 'Париж', 'eu-central-1': 'Франкфурт', 'eu-west-1': 'Ирландия', 'eu-west-2': 'Лондон' };
 
 /* ================= данные ================= */
-const DEF = { level: '', font: 'lit', size: 19, lh: 'm', margin: 'm', theme: 'paper', model: 'gemini-3.8-flash' };
+const DEF = { level: '', font: 'lit', size: 19, lh: 'm', margin: 'm', theme: 'paper', model: 'gemini-3.5-flash-lite' };
 let S = Object.assign({}, DEF, LS.get('lr_s', {}));
+const fixModel = () => { if (!S.model || /^gemini-(2\.5|3\.8)-flash$/.test(S.model)) S.model = DEF.model; };
+fixModel();
 const saveS = () => { LS.set('lr_s', S); schedule(); };
 let books = LS.get('lr_books', []);
 let words = LS.get('lr_words', []);
@@ -98,7 +100,7 @@ async function pull() {
   for (const it of Object.values(queue)) { if (it.kind === 'set') continue; const arr = by[it.kind]; const i = arr.findIndex(x => x.id === it.id); if (it.data) { if (i >= 0) arr[i] = it.data; else arr.push(it.data); } else if (i >= 0) arr.splice(i, 1); }
   const byT = (a, b) => (b.t || b.added || 0) - (a.t || a.added || 0);
   books = by.book.sort(byT); words = by.word.sort(byT); notes = by.note.sort(byT); marks = by.mark.sort(byT);
-  if (set && !queue['set|S']) S = Object.assign({}, DEF, set);
+  if (set && !queue['set|S']) { S = Object.assign({}, DEF, set); fixModel(); }
   LS.set('lr_books', books); LS.set('lr_words', words); LS.set('lr_notes', notes); LS.set('lr_marks', marks); LS.set('lr_s', S);
   snap = EMPTY_SNAP();
   for (const k of Object.keys(KARR)) for (const o of KARR[k]()) snap[k][o.id] = JSON.stringify(o);
