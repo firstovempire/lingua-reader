@@ -11,11 +11,38 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Expose-Headers": "x-lr-region",
+  "Access-Control-Expose-Headers": "x-lr-region, x-lr-model",
 };
 const REGION = Deno.env.get("SB_REGION") ?? "";
 const DAILY_LIMIT = Number(Deno.env.get("DAILY_LIMIT") ?? "1500");
 const MAX_PROMPT = 16000;
+
+// Запасные модели: когда у одной кончился бесплатный лимит (429), пробуем следующую.
+// Список берём у Google для этого ключа (кэш на 6 часов), лёгкие «lite» — первыми.
+const modelCache = new Map<string, { at: number; list: string[] }>();
+// модели, у которых недавно кончился лимит: не дёргаем их 30 минут
+const exhausted = new Map<string, number>();
+const isOut = (key: string, m: string) => (exhausted.get(key.slice(-8) + '|' + m) ?? 0) > Date.now();
+const markOut = (key: string, m: string) => exhausted.set(key.slice(-8) + '|' + m, Date.now() + 30 * 60_000);
+async function fallbackModels(key: string): Promise<string[]> {
+  const hit = modelCache.get(key);
+  if (hit && Date.now() - hit.at < 6 * 3600_000) return hit.list;
+  let list: string[] = [];
+  try {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", { headers: { "x-goog-api-key": key } });
+    if (r.ok) {
+      const j = await r.json();
+      list = (j.models ?? [])
+        .filter((m: any) => (m.supportedGenerationMethods ?? []).includes("generateContent"))
+        .map((m: any) => String(m.name).replace(/^models\//, ""))
+        .filter((n: string) => /flash/i.test(n) && !/(image|audio|tts|live|preview-tts|embedding|exp)/i.test(n));
+      const score = (n: string) => (/lite/i.test(n) ? 0 : 1) * 100 - (parseFloat((n.match(/(\d+(\.\d+)?)/) ?? ["0"])[0]) || 0);
+      list.sort((a, b) => score(a) - score(b));
+    }
+  } catch { /* без списка — работаем только с основной моделью */ }
+  modelCache.set(key, { at: Date.now(), list });
+  return list;
+}
 
 const fail = (status: number, message: string, code = "") =>
   new Response(JSON.stringify({ error: { message, code } }), {
@@ -54,27 +81,40 @@ Deno.serve(async (req) => {
   const { data: cnt } = await admin.rpc("bump_usage", { p_user: uid });
   if (typeof cnt === "number" && cnt > DAILY_LIMIT) return fail(429, "Дневной лимит переводов исчерпан. Попробуйте завтра.", "daily");
 
-  // 5. запрос к Gemini (стриминг)
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
+  // 5. запрос к Gemini (стриминг) с переключением моделей при исчерпании лимита
+  const urlFor = (m: string) => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:streamGenerateContent?alt=sse`;
   const body = (noThinking: boolean) => JSON.stringify({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: { responseMimeType: "application/json", temperature: 0.2, ...(noThinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}) },
   });
-  const call = (noThinking: boolean) => fetch(url, {
+  const call = (m: string, noThinking: boolean) => fetch(urlFor(m), {
     method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": sec.api_key }, body: body(noThinking),
   });
+  const tryModel = async (m: string) => {
+    let r = await call(m, true);
+    if (r.status === 400) { const t = await r.clone().text(); if (/thinking/i.test(t)) r = await call(m, false); }
+    return r;
+  };
 
-  let r = await call(true);
-  if (r.status === 400) {
-    const t = await r.clone().text();
-    if (/thinking/i.test(t)) r = await call(false);
+  const key = sec.api_key;
+  const order = [model, ...(await fallbackModels(key)).filter((m) => m !== model)];
+  let used = model, r: Response | null = null, tried = 0;
+  for (const m of order) {
+    if (isOut(key, m) && m !== order[order.length - 1]) continue;
+    if (tried++ >= 6) break;
+    const res = await tryModel(m);
+    if (res.status === 429 || res.status === 404) { if (res.status === 429) markOut(key, m); r = r ?? res; if (!res.bodyUsed) await res.body?.cancel(); continue; }
+    r = res; used = m; break;
   }
+  if (!r) r = await tryModel(model);
   if (!r.ok) {
-    const text = await r.text();
+    if (r.status === 429) return fail(429, "Бесплатный лимит Google на сегодня исчерпан для всех доступных моделей. Попробуйте позже или завтра.", "quota");
+    if (r.status === 404) return fail(404, "Модель «" + model + "» не найдена. Смените модель в профиле.", "model");
+    const text = await r.text().catch(() => "");
     return new Response(text, { status: r.status, headers: { ...CORS, "Content-Type": "application/json", "x-lr-region": REGION } });
   }
   return new Response(r.body, {
     status: 200,
-    headers: { ...CORS, "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "x-lr-region": REGION },
+    headers: { ...CORS, "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "x-lr-region": REGION, "x-lr-model": used },
   });
 });

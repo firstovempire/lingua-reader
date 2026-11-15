@@ -46,7 +46,7 @@ function speak(text) { try { speechSynthesis.cancel(); const u = new SpeechSynth
 const CFG = window.LR_CONFIG || {};
 const CLOUD = !!(CFG.SUPABASE_URL && CFG.SUPABASE_KEY && window.supabase);
 const sb = CLOUD ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' } }) : null;
-let user = null, keyLast4 = '', lastRegion = '', loggedFor = '';
+let user = null, keyLast4 = '', lastRegion = '', lastModel = '', loggedFor = '';
 const REGION_NAMES = { 'eu-west-3': 'Париж', 'eu-central-1': 'Франкфурт', 'eu-west-1': 'Ирландия', 'eu-west-2': 'Лондон' };
 
 /* ================= данные ================= */
@@ -240,7 +240,7 @@ async function geminiInner(prompt, signal, onPartial, key, arm) {
     try { r = await fetch(fnUrl, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token, 'apikey': CFG.SUPABASE_KEY }, body: JSON.stringify({ prompt, model: S.model }) }); }
     catch (e) { if (e.name === 'AbortError') throw e; throw new Error('Нет связи с сервером перевода. Проверьте интернет.'); }
     arm();
-    lastRegion = r.headers.get('x-lr-region') || lastRegion;
+    lastRegion = r.headers.get('x-lr-region') || lastRegion; lastModel = r.headers.get('x-lr-model') || lastModel;
     if (!r.ok) { const d = await r.json().catch(() => ({})); const err = new Error(d.error && d.error.code ? d.error.message : apiError(r.status, d)); if (d.error && d.error.code === 'no_key') err.needKey = true; throw err; }
     return readStream(r, onPartial, arm);
   }
@@ -374,7 +374,7 @@ function renderProfile() {
   $('#profList').replaceChildren(
     row('Уровень английского', S.level || 'B1', () => { lvlReturn = 'Profile'; renderLevels(); show('Level'); }),
     row('Ключ перевода', k ? 'Gemini ••••' + k.slice(-4) : 'не задан', () => openKey('Profile')),
-    row('Модель', S.model, () => { const m = prompt('Название модели Gemini', S.model); if (m && m.trim()) { S.model = m.trim(); saveS(); renderProfile(); } }),
+    row('Модель', S.model + (lastModel && lastModel !== S.model ? ' (сейчас: ' + lastModel + ')' : ''), () => { const m = prompt('Название модели Gemini', S.model); if (m && m.trim()) { S.model = m.trim(); saveS(); renderProfile(); } }),
     CLOUD && lastRegion ? h('li', null, h('span', { style: 'flex:1;font-size:15px;min-height:44px;display:flex;align-items:center', text: 'Сервер перевода' }), h('span', { class: 'muted', style: 'font-size:14px;padding-right:10px', text: (REGION_NAMES[lastRegion] || lastRegion) })) : null,
     row('Очистить кэш переводов', Object.keys(cache).length + ' шт.', () => { if (confirm('Очистить сохранённые переводы? Слова в словаре останутся.')) { for (const x in cache) delete cache[x]; LS.set('lr_cache', {}); renderProfile(); } }),
     CLOUD && user ? row('Выйти', '', async () => { if (!confirm('Выйти из аккаунта на этом устройстве?')) return; await flush(); await sb.auth.signOut(); }) : null
