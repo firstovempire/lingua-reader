@@ -150,6 +150,7 @@ function show(name) {
   current = name;
   SCREENS.forEach(n => $('#s' + n).classList.toggle('on', n === name));
   document.body.classList.toggle('tabs', TABBED.has(name));
+  document.body.classList.toggle('reading', name === 'Reader');
   $$('#tabbar button').forEach(b => { if (b.dataset.go === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   if (name !== 'Reader') { closeSheet(); closeModal(); document.body.classList.remove('chrome'); }
   if (name === 'Lib') renderLib();
@@ -411,6 +412,9 @@ async function openBook(b, atCfi) {
   $('#loading').style.display = 'none';
   if (book !== bk) return;
   b.lastRead = Date.now(); saveBooks();
+  // подсказка: как открыть меню (первые три раза), панели видны пару секунд
+  if (!isDesk()) { const n = LS.get('lr_taphint', 0); toggleChrome(true); setTimeout(() => { if (current === 'Reader') toggleChrome(false); }, 2200);
+    if (n < 3) { LS.set('lr_taphint', n + 1); tapHintT = setTimeout(() => { $('#tapHint').classList.add('on'); tapHintT = setTimeout(() => $('#tapHint').classList.remove('on'), 2600); }, 2400); } }
   rendition.on('relocated', onRelocated);
   rendition.on('rendered', (section, view) => { try { underlineSaved(view.contents); } catch (e) {} });
   rendition.on('selected', onSelectedRange);
@@ -449,8 +453,9 @@ function updProgress(loc) {
     }
   } catch (e) {}
   if (pct == null) { $('#miniPct').textContent = ''; $('#bPct').textContent = ''; return; }
-  const txt = Math.round(pct * 100) + '%' + (left != null ? ' · до конца главы ~' + left + ' мин' : '');
-  $('#miniPct').textContent = txt; $('#bPct').textContent = txt;
+  const d = loc.start.displayed || {}; const pg = d.total ? 'стр. ' + d.page + ' из ' + d.total + ' · ' : '';
+  const txt = pg + Math.round(pct * 100) + '%' + (left != null ? ' · до конца главы ~' + left + ' мин' : '');
+  $('#miniPct').textContent = txt; $('#bPct').textContent = txt; $('#miniBar i').style.width = (pct * 100).toFixed(1) + '%';
   if (!scrubbing) $('#scrub').value = Math.round(pct * 1000);
   if (curBook) { curBook.pct = pct; curBook.left = left; }
 }
@@ -496,7 +501,7 @@ function attachInput(contents) {
   doc.addEventListener('pointerup', e => {
     if (!pt) return; const p = pt; pt = null;
     const dx = e.screenX - p.sx, dy = e.screenY - p.sy, dt = Date.now() - p.t;
-    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 700) { closeSheet(); dx < 0 ? next() : prev(); return; }
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 700) { killTapHint(); closeSheet(); dx < 0 ? next() : prev(); return; }
     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return;
     const sel = win.getSelection(); if (sel && !sel.isCollapsed && norm(sel.toString())) return; // выделение мышью — обработает 'selected'
     onTap(e, contents);
@@ -506,7 +511,10 @@ function attachInput(contents) {
 }
 const p_isTouch = () => matchMedia('(pointer:coarse)').matches;
 const next = () => { buzz(4); rendition && rendition.next(); }, prev = () => { buzz(4); rendition && rendition.prev(); };
+let tapHintT = null;
+function killTapHint() { clearTimeout(tapHintT); $('#tapHint').classList.remove('on'); }
 function onTap(e, contents) {
+  killTapHint();
   const fr = contents.document.defaultView.frameElement; const vr = $('#viewer').getBoundingClientRect(); const fb = fr.getBoundingClientRect();
   const x = fb.left + e.clientX - vr.left, w = vr.width;
   const edge = Math.max(44, w * 0.12);
