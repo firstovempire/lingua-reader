@@ -712,7 +712,7 @@ function updProgress(loc) {
   if (curBook) { curBook.pct = pct; curBook.left = left; }
 }
 function onRelocated(loc) {
-  act();
+  act(); if (isBubble()) closeBubble();
   lastLoc = loc; markChapter(loc); updProgress(loc); updMarkBtn();
   if (curBook) { curBook.cfi = loc.start.cfi; curBook.chapter = curChapter; curBook.lastRead = Date.now(); clearTimeout(progT); progT = setTimeout(saveBooks, 600); }
 }
@@ -772,10 +772,10 @@ function onTap(e, contents) {
   const fr = contents.document.defaultView.frameElement; const vr = $('#viewer').getBoundingClientRect(); const fb = fr.getBoundingClientRect();
   const x = fb.left + e.clientX - vr.left, w = vr.width;
   const edge = Math.max(44, w * 0.12);
-  if (x < edge && !isSheetOpen()) { prev(); return; }
-  if (x > w - edge && !isSheetOpen()) { next(); return; }
+  if (x < edge && !isSheetOpen() && !isBubble()) { prev(); return; }
+  if (x > w - edge && !isSheetOpen() && !isBubble()) { next(); return; }
   const wr = wordRangeAt(contents.document, e.clientX, e.clientY);
-  if (!wr) { if (isSheetOpen()) { closeSheet(); return; } if (document.body.classList.contains('chrome')) toggleChrome(false); else toggleChrome(true); return; }
+  if (!wr) { if (isBubble()) { closeBubble(); return; } if (isSheetOpen()) { closeSheet(); return; } if (document.body.classList.contains('chrome')) toggleChrome(false); else toggleChrome(true); return; }
   toggleChrome(false);
   let range = wr, isPhrase = false;
   if (phrase && phrase.doc === contents.document && Date.now() - phrase.t < 6000 && blockOf(wr.startContainer) === phrase.block && !sameRange(wr, phrase.range)) {
@@ -831,7 +831,8 @@ function handleRange(range, contents, kind, cfiKnown) {
   if (cfi) { try { const T = THEME[S.theme]; rendition.annotations.highlight(cfi, {}, null, 'lr-sel', { fill: T.sel, 'fill-opacity': T.selOp }); selCfi = cfi; } catch (e) {} }
   try { contents.window.getSelection().removeAllRanges(); } catch (e) {}
   phrase = kind === 'word' ? { doc: contents.document, block: blk, range: range.cloneRange(), t: Date.now() } : null;
-  curCtx = { sel, sentence, context, prev: prevTxt, cfi, kind, chapter: curChapter };
+  let rect = null; try { const rc = range.getBoundingClientRect(), fb = contents.document.defaultView.frameElement.getBoundingClientRect(); rect = { left: fb.left + rc.left, top: fb.top + rc.top, right: fb.left + rc.right, bottom: fb.top + rc.bottom, width: rc.width }; } catch (e) {}
+  curCtx = { sel, sentence, context, prev: prevTxt, cfi, kind, chapter: curChapter, rect };
   if (kind === 'word') showHint(); else hideHint();
   translate(curCtx);
 }
@@ -858,7 +859,7 @@ Return ONLY one JSON object (no markdown), keys in EXACTLY this order:
 const cacheKey = c => (S.level || 'B1') + '|' + c.sel.toLowerCase() + '||' + c.sentence.slice(0, 220);
 async function translate(c) {
   if (aborter) aborter.abort(); aborter = new AbortController(); const signal = aborter.signal;
-  openSheet(false);
+  if (useBubble()) openBubble(c); else openSheet(false);
   const key = cacheKey(c);
   if (cache[key]) { paint(c, cache[key], true); return; }
   paint(c, {}, false);
@@ -869,17 +870,59 @@ async function translate(c) {
   } catch (e) {
     if (e.name === 'AbortError') return;
     if (curCtx !== c) return;
+    paintBubble(c, {}, false, e);
     const body = $('#sheetBody'); body.innerHTML = '';
     body.append(h('div', { class: 'sh-head' }, h('h3', { lang: 'en', text: c.sel })), h('div', { class: 'err', text: e.message }),
       e.needKey ? h('button', { class: 'btn primary', onclick: () => openKey('Reader') }, 'Добавить ключ') : h('button', { class: 'btn', onclick: () => translate(c) }, 'Повторить'));
   }
 }
 
+/* --- пузырь над словом (компьютер) --- */
+const bubble = $('#bubble');
+const isBubble = () => bubble.classList.contains('on');
+const useBubble = () => isDesk() && !isSheetOpen();
+function placeBubble(rect) {
+  if (!rect) return;
+  const W = Math.min(360, window.innerWidth - 24); bubble.style.width = W + 'px';
+  const bh = bubble.offsetHeight || 160, gap = 12;
+  const below = rect.bottom + gap + bh < window.innerHeight - 16 || rect.top - gap - bh < 70;
+  const top = below ? rect.bottom + gap : rect.top - gap - bh;
+  const cx = rect.left + rect.width / 2, left = Math.max(12, Math.min(window.innerWidth - W - 12, cx - W / 2));
+  bubble.style.top = Math.max(12, top) + 'px'; bubble.style.left = left + 'px';
+  bubble.classList.toggle('above', !below); bubble.style.setProperty('--ax', Math.max(18, Math.min(W - 18, cx - left)) + 'px');
+}
+function openBubble(c) { bubble.classList.add('on'); bubble.setAttribute('aria-hidden', 'false'); placeBubble(c.rect); }
+function closeBubble(keepSel) {
+  if (!isBubble()) return;
+  bubble.classList.remove('on'); bubble.setAttribute('aria-hidden', 'true');
+  if (!keepSel && !isSheetOpen()) { if (aborter) aborter.abort(); phrase = null; try { if (selCfi && rendition) rendition.annotations.remove(selCfi, 'highlight'); } catch (e) {} selCfi = null; }
+}
+function paintBubble(c, r, done, err) {
+  if (!isBubble() || curCtx !== c) return;
+  const sv = savedWord(c);
+  const star = h('button', { class: 'star', 'aria-label': sv ? 'Убрать из словаря' : 'В словарь', 'aria-pressed': String(!!sv), disabled: !done && !sv, onclick: () => toggleSave(c, r) }, ico('star', 20));
+  const ex = Array.isArray(r.examples) ? r.examples.filter(x => x && x.en) : [];
+  bubble.replaceChildren(
+    h('div', { class: 'sh-head' }, h('h3', { lang: 'en', text: c.sel }), iconBtn('speak', 'Произнести', () => speak(c.sel), 'icobtn', 20), h('span', { class: 'pos', text: r.pos || '' }), star),
+    err ? h('div', { class: 'err', text: err.message }) : r.translation ? h('div', { class: 'sh-tr', text: r.translation }) : h('div', { class: 'muted' }, h('span', { class: 'spin' }), '  Перевожу…'),
+    ex[0] ? h('div', { class: 'sh-ex' }, h('div', { class: 'en', lang: 'en', text: ex[0].en }), h('div', { class: 'ru', text: ex[0].ru || '' })) : null,
+    h('div', { class: 'bb-acts' },
+      err ? (err.needKey ? h('button', { class: 'btn primary', onclick: () => openKey('Reader') }, 'Добавить ключ') : h('button', { class: 'btn', onclick: () => translate(c) }, 'Повторить')) : null,
+      h('button', { class: 'btn', 'aria-label': 'Цитата', title: 'Цитата', onclick: () => addQuote(c) }, ico('quote', 18)),
+      h('button', { class: 'btn', 'aria-label': 'Заметка', title: 'Заметка', onclick: () => openNote(c) }, ico('note', 18)),
+      h('span', { style: 'flex:1' }),
+      h('button', { class: 'btn dark', onclick: () => { closeBubble(true); openSheet(true); } }, 'Подробнее', ico('chev', 16))));
+  placeBubble(c.rect);
+}
+document.addEventListener('pointerdown', e => { if (isBubble() && !bubble.contains(e.target) && !$('#modal').contains(e.target) && !e.target.closest('#viewer')) closeBubble(); });
+window.addEventListener('resize', () => { if (isBubble()) closeBubble(); });
+
 /* --- шторка перевода --- */
 const sheet = $('#sheet');
 const isSheetOpen = () => sheet.classList.contains('open');
 function openSheet(full) { if (isDesk()) full = true; sheet.classList.add('open'); sheet.classList.toggle('full', !!full); sheet.setAttribute('aria-hidden', 'false'); document.body.classList.add('sheet-open'); placeHint(); }
 function closeSheet() {
+  if (isBubble()) closeBubble();
   if (!isSheetOpen()) return;
   sheet.classList.remove('open', 'full'); sheet.setAttribute('aria-hidden', 'true'); document.body.classList.remove('sheet-open'); hideHint();
   if (aborter) aborter.abort(); phrase = null;
@@ -928,6 +971,7 @@ function paint(c, r, done) {
     h('button', { class: 'btn sq', 'aria-label': 'Цитата', onclick: () => addQuote(c) }, ico('quote', 20)),
     h('button', { class: 'btn sq', 'aria-label': 'Заметка', onclick: () => openNote(c) }, ico('note', 20))));
   body.scrollTop = top; placeHint();
+  paintBubble(c, r, done);
 }
 function toggleSave(c, r) {
   const sv = savedWord(c);

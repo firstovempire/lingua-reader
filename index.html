@@ -280,6 +280,19 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 .cat-meta{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
 .cat-meta .lv{font-style:normal;font-weight:700;font-size:11px;padding:2px 6px;border-radius:5px;background:var(--accent-soft);color:var(--accent)}
 
+/* ---------- пузырь перевода (компьютер) ---------- */
+#bubble{position:fixed;z-index:32;display:none;flex-direction:column;gap:10px;padding:14px 14px 12px 16px;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 14px 40px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.08);animation:bbIn .14s ease-out}
+#bubble.on{display:flex}
+#bubble::before{content:"";position:absolute;left:calc(var(--ax,50%) - 8px);top:-8px;width:14px;height:14px;background:var(--card);border-left:1px solid var(--line);border-top:1px solid var(--line);transform:rotate(45deg)}
+#bubble.above::before{top:auto;bottom:-8px;transform:rotate(225deg)}
+#bubble .sh-head h3{font-size:20px}
+#bubble .star{width:38px;height:38px;border-radius:10px}
+#bubble .sh-tr{font-size:20px}
+#bubble .sh-ex .en{font-size:15px}
+.bb-acts{display:flex;gap:6px;align-items:center}
+.bb-acts .btn{min-height:36px;padding:0 10px;font-size:14px}
+@keyframes bbIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
 /* ---------- desktop: панели справа ---------- */
 @media (min-width:900px){
   #sheet{left:auto;top:0;width:400px;max-height:none!important;height:100dvh!important;border-radius:0;transform:translateX(105%);box-shadow:-10px 0 30px rgba(0,0,0,.08);border-left:1px solid var(--line)}
@@ -445,6 +458,7 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
   <div class="grab" id="sheetGrab"><span></span></div>
   <div id="sheetBody"></div>
 </section>
+<div id="bubble" role="dialog" aria-label="Перевод" aria-hidden="true"></div>
 <div id="hint">Фраза? Коснитесь её последнего слова</div>
 
 <div id="scrim"></div>
