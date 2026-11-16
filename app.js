@@ -52,7 +52,7 @@ let user = null, keyLast4 = '', lastRegion = '', lastModel = '', loggedFor = '';
 const REGION_NAMES = { 'eu-west-3': 'Париж', 'eu-central-1': 'Франкфурт', 'eu-west-1': 'Ирландия', 'eu-west-2': 'Лондон' };
 
 /* ================= данные ================= */
-const DEF = { level: '', font: 'lit', size: 19, lh: 'm', margin: 'm', theme: 'paper', model: 'gemini-3.5-flash-lite', revDir: 'en', sound: true, goal: 10 };
+const DEF = { level: '', font: 'lit', size: 19, lh: 'm', margin: 'm', theme: 'paper', model: 'gemini-3.5-flash-lite', revDir: 'en', sound: true, goal: 10, flow: 'paged' };
 let S = Object.assign({}, DEF, LS.get('lr_s', {}));
 const fixModel = () => { if (!S.model || /^gemini-(2\.5|3\.8)-flash$/.test(S.model)) S.model = DEF.model; };
 fixModel();
@@ -179,6 +179,7 @@ const SCREENS = ['Login', 'Level', 'Key', 'Lib', 'Words', 'Review', 'Profile', '
 const TABBED = new Set(['Lib', 'Words', 'Review', 'Profile']);
 let current = '';
 function show(name) {
+  if (name !== 'Reader') { const nc = document.getElementById('nextCh'); if (nc) nc.classList.remove('on'); }
   current = name;
   SCREENS.forEach(n => $('#s' + n).classList.toggle('on', n === name));
   document.body.classList.toggle('tabs', TABBED.has(name));
@@ -640,7 +641,7 @@ let book = null, rendition = null, curBook = null, navToc = [], spineChars = nul
 async function openBook(b, atCfi) {
   curBook = b; show('Reader');
   $('#loading').style.display = 'flex'; $('#rTitle').textContent = b.title;
-  $('#miniCh').textContent = ''; $('#miniPct').textContent = ''; $('#bCh').textContent = ''; $('#bPct').textContent = '';
+  $('#miniCh').textContent = b.title; $('#miniPct').textContent = ''; $('#bCh').textContent = ''; $('#bPct').textContent = '';
   try { if (rendition) rendition.destroy(); if (book) book.destroy(); } catch (e) {}
   rendition = null; book = null; spineChars = null; navToc = []; selCfi = null;
   let buf; try { buf = await files.get(b.id); } catch (e) {}
@@ -664,7 +665,11 @@ async function openBook(b, atCfi) {
       doc.querySelectorAll('*').forEach(el => { for (const at of [...el.attributes]) { const n = at.name.toLowerCase(), v = (at.value || '').trim().toLowerCase(); if (n.startsWith('on') || ((n === 'href' || n === 'src' || n.endsWith(':href') || n === 'xlink:href') && v.startsWith('javascript:'))) el.removeAttribute(at.name); } });
     } catch (e) {}
   });
-  rendition = book.renderTo('viewer', { width: '100%', height: '100%', flow: 'paginated', spread: 'none', allowScriptedContent: true, minSpreadWidth: 99999 });
+  const scrollMode = S.flow === 'scroll';
+  document.body.classList.toggle('scrollmode', scrollMode);
+  rendition = book.renderTo('viewer', scrollMode
+    ? { width: '100%', height: '100%', flow: 'scrolled-doc', allowScriptedContent: true }
+    : { width: '100%', height: '100%', flow: 'paginated', spread: 'none', allowScriptedContent: true, minSpreadWidth: 99999 });
   rendition.hooks.content.register(contents => {
     try { contents.addStylesheet(fontUrl(S.font)); } catch (e) {}
     attachInput(contents);
@@ -680,6 +685,7 @@ async function openBook(b, atCfi) {
   if (!isDesk()) { const n = LS.get('lr_taphint', 0); toggleChrome(true); setTimeout(() => { if (current === 'Reader') toggleChrome(false); }, 2200);
     if (n < 3) { LS.set('lr_taphint', n + 1); tapHintT = setTimeout(() => { $('#tapHint').classList.add('on'); tapHintT = setTimeout(() => $('#tapHint').classList.remove('on'), 2600); }, 2400); } }
   rendition.on('relocated', onRelocated);
+  if (scrollMode) watchChapterEnd();
   rendition.on('rendered', (section, view) => { try { underlineSaved(view.contents); } catch (e) {} });
   rendition.on('selected', onSelectedRange);
   try { rendition.getContents().forEach(c => underlineSaved(c)); } catch (e) {}
@@ -694,6 +700,15 @@ async function openBook(b, atCfi) {
   }).catch(() => {});
   if (atCfi) setTimeout(() => { try { rendition.annotations.highlight(atCfi, {}, null, 'lr-flash', { fill: THEME[S.theme].sel, 'fill-opacity': '0.8' }); setTimeout(() => { try { rendition.annotations.remove(atCfi, 'highlight'); } catch (e) {} }, 1600); } catch (e) {} }, 400);
 }
+// режим прокрутки: глава — одна лента; в конце главы появляется кнопка «Следующая глава»
+function watchChapterEnd() {
+  const pill = $('#nextCh'); pill.classList.remove('on');
+  const box = $('#viewer .epub-container'); if (!box) return;
+  const chk = () => { const end = box.scrollTop + box.clientHeight >= box.scrollHeight - 40; pill.classList.toggle('on', end && current === 'Reader' && S.flow === 'scroll'); };
+  box.addEventListener('scroll', chk, { passive: true });
+  rendition.on('rendered', () => { pill.classList.remove('on'); setTimeout(chk, 300); });
+}
+$('#nextCh').onclick = () => { $('#nextCh').classList.remove('on'); next(); };
 function flatToc(items, d = 0, out = []) { (items || []).forEach(it => { out.push({ href: it.href, label: norm(it.label), depth: d }); flatToc(it.subitems, d + 1, out); }); return out; }
 const hrefBase = s => String(s || '').split('#')[0].replace(/^\.?\//, '');
 function chapterFor(loc) {
@@ -707,7 +722,7 @@ function chapterFor(loc) {
   return best;
 }
 let curChapter = '';
-function markChapter(loc) { curChapter = chapterFor(loc); $('#miniCh').textContent = curChapter; $('#bCh').textContent = curChapter; }
+function markChapter(loc) { curChapter = chapterFor(loc); $('#miniCh').textContent = curChapter || (curBook ? curBook.title : ''); $('#bCh').textContent = curChapter; }
 function buildSpineChars() {
   spineChars = {};
   try { (book.locations._locations || []).forEach((cfi, i) => { const sp = new ePub.CFI(cfi).spinePos; (spineChars[sp] = spineChars[sp] || []).push(i); }); } catch (e) { spineChars = null; }
@@ -723,9 +738,13 @@ function updProgress(loc) {
     }
   } catch (e) {}
   if (pct == null) { $('#miniPct').textContent = ''; $('#bPct').textContent = ''; return; }
-  const d = loc.start.displayed || {}; const pg = d.total ? 'стр. ' + d.page + ' из ' + d.total + ' · ' : '';
-  const txt = pg + Math.round(pct * 100) + '%' + (left != null ? ' · до конца главы ~' + left + ' мин' : '');
-  $('#miniPct').textContent = txt; $('#bPct').textContent = txt; $('#miniBar i').style.width = (pct * 100).toFixed(1) + '%';
+  const d = loc.start.displayed || {}, P = Math.round(pct * 100) + '%';
+  const rest = S.flow !== 'scroll' && d.total ? Math.max(0, d.total - d.page) : null;
+  const parts = [];
+  if (rest != null) parts.push(rest ? 'до конца главы ' + rest + ' ' + plural(rest, 'страница', 'страницы', 'страниц') : 'последняя страница главы');
+  if (left != null) parts.push('~' + left + ' мин');
+  parts.push(P + ' книги');
+  $('#miniPct').textContent = P; $('#bPct').textContent = parts.join(' · '); $('#miniBar i').style.width = (pct * 100).toFixed(1) + '%';
   if (!scrubbing) $('#scrub').value = Math.round(pct * 1000);
   if (curBook) { curBook.pct = pct; curBook.left = left; }
 }
@@ -739,7 +758,7 @@ function applyReader() {
   if (!rendition) return;
   const T = THEME[S.theme], F = (FONTS.find(f => f.id === S.font) || FONTS[0]).css;
   rendition.themes.default({
-    'html': { 'background': T.page + ' !important', 'touch-action': 'none' },
+    'html': { 'background': T.page + ' !important', 'touch-action': S.flow === 'scroll' ? 'pan-y' : 'none' },
     'body': { 'font-family': F + ' !important', 'line-height': LH[S.lh] + ' !important', 'color': T.text + ' !important', 'background': 'transparent !important', '-webkit-text-size-adjust': '100%', '-webkit-touch-callout': 'none' },
     'p, li, div, span, blockquote, td': { 'font-family': 'inherit !important', 'line-height': 'inherit !important', 'color': 'inherit !important' },
     'a': { 'color': 'inherit !important' },
@@ -774,7 +793,7 @@ function attachInput(contents) {
   const up = (ev, x, y, sx, sy) => {
     if (!pt) return; const p = pt; pt = null;
     const dx = sx - p.sx, dy = sy - p.sy, dt = Date.now() - p.t;
-    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 700) { killTapHint(); closeSheet(); dx < 0 ? next() : prev(); return; }
+    if (S.flow !== 'scroll' && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 700) { killTapHint(); closeSheet(); dx < 0 ? next() : prev(); return; }
     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return;
     const sel = win.getSelection(); if (sel && !sel.isCollapsed && norm(sel.toString())) return; // выделение мышью — обработает 'selected'
     onTap({ clientX: x, clientY: y }, contents);
@@ -797,11 +816,11 @@ const p_isTouch = () => matchMedia('(pointer:coarse)').matches;
   const down = (t, x, y) => { p0 = skip(t) ? null : { x, y, t: Date.now() }; };
   const up = (x, y) => {
     if (!p0 || !rendition) { p0 = null; return; } const p = p0; p0 = null; const dx = x - p.x, dy = y - p.y;
-    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - p.t < 700) { killTapHint(); closeSheet(); dx < 0 ? next() : prev(); return; }
+    if (S.flow !== 'scroll' && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - p.t < 700) { killTapHint(); closeSheet(); dx < 0 ? next() : prev(); return; }
     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return;
     killTapHint();
     if (isBubble()) { closeBubble(); return; } if (isSheetOpen()) { closeSheet(); return; }
-    const w = window.innerWidth; if (x < w * 0.3) prev(); else if (x > w * 0.7) next(); else toggleChrome(!document.body.classList.contains('chrome'));
+    const w = window.innerWidth; if (S.flow !== 'scroll' && x < w * 0.3) prev(); else if (S.flow !== 'scroll' && x > w * 0.7) next(); else toggleChrome(!document.body.classList.contains('chrome'));
   };
   scr.addEventListener('touchstart', e => { const t = e.changedTouches[0]; down(e.target, t.clientX, t.clientY); }, { passive: true });
   scr.addEventListener('touchend', e => { const t = e.changedTouches[0]; up(t.clientX, t.clientY); });
@@ -816,10 +835,12 @@ function onTap(e, contents) {
   const fr = contents.document.defaultView.frameElement; const vr = $('#viewer').getBoundingClientRect(); const fb = fr.getBoundingClientRect();
   const x = fb.left + e.clientX - vr.left, w = vr.width;
   const edge = Math.max(44, w * 0.12);
-  if (x < edge && !isSheetOpen() && !isBubble()) { prev(); return; }
-  if (x > w - edge && !isSheetOpen() && !isBubble()) { next(); return; }
+  const paged = S.flow !== 'scroll';
+  if (paged && x < edge && !isSheetOpen() && !isBubble()) { prev(); return; }
+  if (paged && x > w - edge && !isSheetOpen() && !isBubble()) { next(); return; }
   const wr = wordRangeAt(contents.document, e.clientX, e.clientY);
   if (!wr) { if (isBubble()) { closeBubble(); return; } if (isSheetOpen()) { closeSheet(); return; } if (document.body.classList.contains('chrome')) toggleChrome(false); else toggleChrome(true); return; }
+  if ((isSheetOpen() || isBubble()) && curCtx && curCtx.doc === contents.document && curCtx.range && overlaps(curCtx.range, wr)) { phrase = null; closeSheet(); closeBubble(); return; } // второй тап по выделенному — закрыть
   toggleChrome(false);
   let range = wr, isPhrase = false;
   if (phrase && phrase.doc === contents.document && Date.now() - phrase.t < 6000 && blockOf(wr.startContainer) === phrase.block && !sameRange(wr, phrase.range)) {
@@ -831,6 +852,7 @@ function onTap(e, contents) {
   buzz(8);
   handleRange(range, contents, isPhrase ? 'phrase' : 'word');
 }
+const overlaps = (a, b) => { try { return a.compareBoundaryPoints(Range.START_TO_END, b) > 0 && a.compareBoundaryPoints(Range.END_TO_START, b) < 0; } catch (e) { return false; } };
 const sameRange = (a, b) => a.startContainer === b.startContainer && a.startOffset === b.startOffset;
 const WCH = /[A-Za-zÀ-ÖØ-öø-ÿ0-9'’\-]/;
 function wordRangeAt(doc, x, y) {
@@ -876,7 +898,7 @@ function handleRange(range, contents, kind, cfiKnown) {
   try { contents.window.getSelection().removeAllRanges(); } catch (e) {}
   phrase = kind === 'word' ? { doc: contents.document, block: blk, range: range.cloneRange(), t: Date.now() } : null;
   let rect = null; try { const rc = range.getBoundingClientRect(), fb = contents.document.defaultView.frameElement.getBoundingClientRect(); rect = { left: fb.left + rc.left, top: fb.top + rc.top, right: fb.left + rc.right, bottom: fb.top + rc.bottom, width: rc.width }; } catch (e) {}
-  curCtx = { sel, sentence, context, prev: prevTxt, cfi, kind, chapter: curChapter, rect };
+  curCtx = { sel, sentence, context, prev: prevTxt, cfi, kind, chapter: curChapter, rect, range: range.cloneRange(), doc: contents.document };
   if (kind === 'word') showHint(); else hideHint();
   translate(curCtx);
 }
@@ -1113,11 +1135,13 @@ function renderAa() {
       h('button', { class: 'btn', style: 'width:52px;padding:0', 'aria-label': 'Меньше', onclick: () => { S.size = Math.max(14, S.size - 1); upd(); } }, 'A−'),
       h('b', { style: 'flex:1;text-align:center;font-size:16px', text: S.size }),
       h('button', { class: 'btn', style: 'width:52px;padding:0;font-size:19px', 'aria-label': 'Больше', onclick: () => { S.size = Math.min(30, S.size + 1); upd(); } }, 'A+')),
+    h('div', { class: 'aa-row' }, h('span', null, 'Чтение'), seg([['paged', 'Страницы'], ['scroll', 'Прокрутка']], S.flow || 'paged', v => { if ((S.flow || 'paged') === v) return; S.flow = v; saveS(); closeModal(); if (curBook) openBook(curBook, lastLoc && lastLoc.start && lastLoc.start.cfi); }, 'Режим чтения')),
     h('div', { class: 'aa-row' }, h('span', null, 'Интервал'), seg([['s', 'Плотно'], ['m', 'Обычно'], ['l', 'Свободно']], S.lh, v => { S.lh = v; upd(); }, 'Интервал')),
     h('div', { class: 'aa-row' }, h('span', null, 'Поля'), seg([['s', 'Узкие'], ['m', 'Средние'], ['l', 'Широкие']], S.margin, v => { S.margin = v; upd(); }, 'Поля')),
     h('div', { class: 'aa-row' }, h('span', null, 'Тема'), h('div', { class: 'themes', role: 'radiogroup', 'aria-label': 'Тема' }, Object.entries(T).map(([k, [t, bg, fg]]) => h('button', { role: 'radio', 'aria-checked': String(S.theme === k), style: `background:${bg};color:${fg}`, onclick: () => { S.theme = k; upd(); } }, t))))
   );
 }
+$('#rBack2').onclick = () => $('#rBack').click();
 $('#aaBtn').onclick = () => { openModal([], { clear: true }); renderAa(); };
 
 /* оглавление / закладки / заметки */
@@ -1203,8 +1227,8 @@ async function afterLogin() {
     LS.set('lr_queue', queue); LS.set('lr_snap', snap);
   }
   show('Lib'); $('#bookList').replaceChildren(h('li', { class: 'empty', style: 'display:block;border:0' }, h('span', { class: 'spin' }), '  Загружаю библиотеку…'));
-  try { await pull(); } catch (e) { console.warn(e); toast('Нет связи с сервером — показываю сохранённое на устройстве', 4000); }
-  try { const r = await sb.rpc('get_key_status'); keyLast4 = (r.data && r.data[0] && r.data[0].last4) || ''; } catch (e) {}
+  try { await withTimeout(pull(), 12000); } catch (e) { console.warn(e); toast('Нет связи с сервером — показываю сохранённое на устройстве', 4000); }
+  try { const r = await withTimeout(sb.rpc('get_key_status'), 8000); keyLast4 = (r.data && r.data[0] && r.data[0].last4) || ''; } catch (e) {}
   applyTheme(); ensureUploads();
   nextAfterLogin();
 }
@@ -1213,15 +1237,22 @@ $('#btnGoogle').onclick = async () => {
   const r = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname, queryParams: { prompt: 'select_account' } } });
   if (r.error) $('#loginMsg').replaceChildren(h('div', { class: 'err', text: r.error.message }));
 };
+function withTimeout(p, ms) { return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]); }
+function offlineStart() {
+  user = { id: LS.get('lr_uid', '') }; loggedFor = user.id;
+  applyTheme(); show('Lib');
+  toast('Нет связи с сервером. Скачанные книги доступны, перевод и синхронизация — когда связь вернётся', 6000);
+}
 async function boot() {
   if (!CLOUD) { nextAfterLogin(); return; }
   sb.auth.onAuthStateChange((ev, sess) => {
     if (ev === 'SIGNED_OUT') { user = null; loggedFor = ''; keyLast4 = ''; show('Login'); return; }
     if (sess && sess.user && (!user || user.id !== sess.user.id)) { user = sess.user; setTimeout(afterLogin, 0); }
   });
-  let session = null;
-  try { session = (await sb.auth.getSession()).data.session; } catch (e) {}
+  let session = null, timedOut = false;
+  try { session = (await withTimeout(sb.auth.getSession(), 7000)).data.session; } catch (e) { timedOut = e && e.message === 'timeout'; }
   if (session) { user = session.user; await afterLogin(); return; }
+  if (timedOut && LS.get('lr_uid', '')) { offlineStart(); return; } // сервер не отвечает — работаем с тем, что на устройстве
   const qs = new URLSearchParams(location.search + '&' + location.hash.replace(/^#/, ''));
   show('Login');
   if (qs.get('error_description')) $('#loginMsg').replaceChildren(h('div', { class: 'err', text: 'Вход не удался: ' + qs.get('error_description') }));
