@@ -1,0 +1,272 @@
+[
+{
+"id": "oscar-wilde_childrens-stories",
+"title": "Children’s Stories",
+"author": "Oscar Wilde",
+"level": "A2",
+"words": 49742,
+"size": 246874,
+"about": "Сказки Уайльда: «Счастливый принц», «Соловей и роза», «Великан-эгоист». Короткие, добрые и очень красивые."
+},
+{
+"id": "l-frank-baum_the-wonderful-wizard-of-oz",
+"title": "The Wonderful Wizard of Oz",
+"author": "L. Frank Baum",
+"level": "B1",
+"words": 39662,
+"size": 197983,
+"about": "Оригинал «Волшебника Изумрудного города»: Дороти, Страшила, Железный Дровосек и Лев."
+},
+{
+"id": "lewis-carroll_alices-adventures-in-wonderland_john-tenniel",
+"title": "Alice’s Adventures in Wonderland",
+"author": "Lewis Carroll",
+"level": "B1",
+"words": 26976,
+"size": 4710777,
+"about": "«Алиса в Стране чудес» с иллюстрациями Тенниела. Игра слов, которую интересно разгадывать на английском."
+},
+{
+"id": "frances-hodgson-burnett_the-secret-garden",
+"title": "The Secret Garden",
+"author": "Frances Hodgson Burnett",
+"level": "B1",
+"words": 81359,
+"size": 317089,
+"about": "Девочка находит заброшенный сад, и он меняет всех вокруг. Простой язык, тёплая история."
+},
+{
+"id": "jack-london_the-call-of-the-wild",
+"title": "The Call of the Wild",
+"author": "Jack London",
+"level": "B1",
+"words": 32125,
+"size": 170772,
+"about": "Пёс Бак попадает на Аляску во времена золотой лихорадки. Короткий и динамичный роман."
+},
+{
+"id": "jack-london_white-fang",
+"title": "White Fang",
+"author": "Jack London",
+"level": "B1",
+"words": 72885,
+"size": 254902,
+"about": "«Белый Клык» — путь волчонка от дикой природы к человеку."
+},
+{
+"id": "j-m-barrie_peter-and-wendy",
+"title": "Peter and Wendy",
+"author": "J. M. Barrie",
+"level": "B1",
+"words": 47356,
+"size": 237063,
+"about": "Оригинальный «Питер Пэн»: Неверленд, пираты и капитан Крюк."
+},
+{
+"id": "rudyard-kipling_the-jungle-book",
+"title": "The Jungle Book",
+"author": "Rudyard Kipling",
+"level": "B1",
+"words": 51702,
+"size": 221561,
+"about": "«Книга джунглей»: Маугли, Багира, Балу и другие рассказы Киплинга."
+},
+{
+"id": "anna-sewell_black-beauty",
+"title": "Black Beauty",
+"author": "Anna Sewell",
+"level": "B1",
+"words": 60171,
+"size": 240499,
+"about": "История лошади, рассказанная ею самой. Спокойный язык, удобно для начала."
+},
+{
+"id": "e-nesbit_the-railway-children",
+"title": "The Railway Children",
+"author": "E. Nesbit",
+"level": "B1",
+"words": 60061,
+"size": 278611,
+"about": "Трое детей переезжают в деревню у железной дороги. Лёгкая семейная классика."
+},
+{
+"id": "arthur-conan-doyle_the-adventures-of-sherlock-holmes",
+"title": "The Adventures of Sherlock Holmes",
+"author": "Arthur Conan Doyle",
+"level": "B2",
+"words": 105490,
+"size": 322902,
+"about": "Двенадцать рассказов о Шерлоке Холмсе. Каждый можно прочитать за вечер."
+},
+{
+"id": "arthur-conan-doyle_the-hound-of-the-baskervilles",
+"title": "The Hound of the Baskervilles",
+"author": "Arthur Conan Doyle",
+"level": "B2",
+"words": 59586,
+"size": 242136,
+"about": "Самое известное дело Холмса: болота, проклятие и огромная собака."
+},
+{
+"id": "robert-louis-stevenson_treasure-island",
+"title": "Treasure Island",
+"author": "Robert Louis Stevenson",
+"level": "B2",
+"words": 68912,
+"size": 314680,
+"about": "«Остров сокровищ»: карта, пираты и Джон Сильвер."
+},
+{
+"id": "robert-louis-stevenson_the-strange-case-of-dr-jekyll-and-mr-hyde",
+"title": "The Strange Case of Dr. Jekyll and Mr. Hyde",
+"author": "Robert Louis Stevenson",
+"level": "B2",
+"words": 25768,
+"size": 164073,
+"about": "Короткая повесть о докторе Джекиле и мистере Хайде. Мрачно и быстро читается."
+},
+{
+"id": "h-g-wells_the-time-machine",
+"title": "The Time Machine",
+"author": "H. G. Wells",
+"level": "B2",
+"words": 32591,
+"size": 201267,
+"about": "Путешественник во времени попадает в далёкое будущее. Короткий научно-фантастический роман."
+},
+{
+"id": "h-g-wells_the-war-of-the-worlds",
+"title": "The War of the Worlds",
+"author": "H. G. Wells",
+"level": "B2",
+"words": 60594,
+"size": 305786,
+"about": "Марсиане высаживаются в Англии. Классика фантастики о вторжении."
+},
+{
+"id": "mark-twain_the-adventures-of-tom-sawyer",
+"title": "The Adventures of Tom Sawyer",
+"author": "Mark Twain",
+"level": "B2",
+"words": 71443,
+"size": 307272,
+"about": "Приключения Тома Сойера на Миссисипи. Много живой разговорной речи."
+},
+{
+"id": "charles-dickens_a-christmas-carol",
+"title": "A Christmas Carol",
+"author": "Charles Dickens",
+"level": "B2",
+"words": 28775,
+"size": 169683,
+"about": "«Рождественская песнь»: скряга Скрудж и три духа. Короткая повесть."
+},
+{
+"id": "jerome-k-jerome_three-men-in-a-boat",
+"title": "Three Men in a Boat",
+"author": "Jerome K. Jerome",
+"level": "B2",
+"words": 67390,
+"size": 284905,
+"about": "«Трое в лодке, не считая собаки» — британский юмор в оригинале."
+},
+{
+"id": "kenneth-grahame_the-wind-in-the-willows",
+"title": "The Wind in the Willows",
+"author": "Kenneth Grahame",
+"level": "B2",
+"words": 59439,
+"size": 290072,
+"about": "«Ветер в ивах»: Крот, Крыс, Барсук и мистер Жаб."
+},
+{
+"id": "oscar-wilde_the-importance-of-being-earnest",
+"title": "The Importance of Being Earnest",
+"author": "Oscar Wilde",
+"level": "B2",
+"words": 20588,
+"size": 140720,
+"about": "Пьеса «Как важно быть серьёзным». Сплошные диалоги и остроумие."
+},
+{
+"id": "bram-stoker_dracula",
+"title": "Dracula",
+"author": "Bram Stoker",
+"level": "B2",
+"words": 161536,
+"size": 440754,
+"about": "«Дракула» в письмах и дневниках. Длинный, но затягивает."
+},
+{
+"id": "kate-chopin_the-awakening",
+"title": "The Awakening",
+"author": "Kate Chopin",
+"level": "B2",
+"words": 50149,
+"size": 218171,
+"about": "«Пробуждение»: женщина в Новом Орлеане конца XIX века ищет себя."
+},
+{
+"id": "f-scott-fitzgerald_the-great-gatsby",
+"title": "The Great Gatsby",
+"author": "F. Scott Fitzgerald",
+"level": "C1",
+"words": 48698,
+"size": 198832,
+"about": "«Великий Гэтсби»: богатство, вечеринки и разбитые мечты эпохи джаза."
+},
+{
+"id": "oscar-wilde_the-picture-of-dorian-gray",
+"title": "The Picture of Dorian Gray",
+"author": "Oscar Wilde",
+"level": "C1",
+"words": 79511,
+"size": 300577,
+"about": "«Портрет Дориана Грея»: портрет стареет вместо героя. Афоризмы на каждой странице."
+},
+{
+"id": "jane-austen_pride-and-prejudice",
+"title": "Pride and Prejudice",
+"author": "Jane Austen",
+"level": "C1",
+"words": 122244,
+"size": 469323,
+"about": "«Гордость и предубеждение»: Элизабет Беннет и мистер Дарси. Изящный язык начала XIX века."
+},
+{
+"id": "charlotte-bronte_jane-eyre",
+"title": "Jane Eyre",
+"author": "Charlotte Brontë",
+"level": "C1",
+"words": 188139,
+"size": 560696,
+"about": "«Джейн Эйр»: сирота, гувернантка и тайна Торнфилда."
+},
+{
+"id": "mary-shelley_frankenstein",
+"title": "Frankenstein",
+"author": "Mary Shelley",
+"level": "C1",
+"words": 78127,
+"size": 327693,
+"about": "«Франкенштейн»: учёный создаёт жизнь и не справляется с последствиями."
+},
+{
+"id": "edgar-allan-poe_short-fiction",
+"title": "Short Stories",
+"author": "Edgar Allan Poe",
+"level": "C1",
+"words": 313147,
+"size": 950223,
+"about": "Рассказы Эдгара По: «Падение дома Ашеров», «Золотой жук», «Убийство на улице Морг»."
+},
+{
+"id": "virginia-woolf_mrs-dalloway",
+"title": "Mrs. Dalloway",
+"author": "Virginia Woolf",
+"level": "C1",
+"words": 64098,
+"size": 240552,
+"about": "«Миссис Дэллоуэй»: один день в Лондоне глазами нескольких героев. Поток сознания."
+}
+]

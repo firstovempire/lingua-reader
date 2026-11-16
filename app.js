@@ -121,7 +121,7 @@ async function uploadBook(b, buf) {
   b.up = true; saveBooks();
 }
 async function ensureUploads() {
-  for (const b of books.filter(x => !x.up)) { try { const buf = await files.get(b.id); if (buf) await uploadBook(b, buf); } catch (e) { console.warn('upload', e); } }
+  for (const b of books.filter(x => !x.up && !x.cat)) { try { const buf = await files.get(b.id); if (buf) await uploadBook(b, buf); } catch (e) { console.warn('upload', e); } }
 }
 
 /* ================= статистика: дни, серия, цель ================= */
@@ -344,7 +344,7 @@ function renderLib() {
         h('div', { class: 'muted', style: 'font-size:13px', text: Math.round((cont.pct || 0) * 100) + '%' + minsLeftText(cont) }),
         h('button', { class: 'btn primary', style: 'margin-top:auto;align-self:flex-start', onclick: () => openBook(cont) }, 'Читать'))));
   }
-  if (!books.length) { list.append(h('li', { class: 'empty', style: 'display:block;border:0' }, h('div', { style: 'font-family:var(--serif);font-size:18px;color:var(--ink);margin-bottom:6px', text: 'Пока нет книг' }), 'Нажмите «+ EPUB» и выберите файл книги на английском.')); return; }
+  if (!books.length) { list.append(h('li', { class: 'empty', style: 'display:block;border:0' }, h('div', { style: 'font-family:var(--serif);font-size:18px;color:var(--ink);margin-bottom:6px', text: 'Пока нет книг' }), 'Нажмите «+ EPUB» и выберите файл книги на английском — или возьмите бесплатную классику из каталога.', h('div', { style: 'margin-top:14px' }, h('button', { class: 'btn primary', onclick: openCatalog }, 'Открыть каталог')))); return; }
   sorted.forEach(b => {
     const pct = Math.round((b.pct || 0) * 100);
     const status = b.pct >= 0.995 ? h('div', { style: 'display:flex;align-items:center;gap:6px;font-size:13px;color:var(--accent);font-weight:600' }, ico('check', 16), 'Прочитано')
@@ -359,7 +359,7 @@ function renderLib() {
 async function delBook(b) {
   if (!confirm('Удалить «' + b.title + '»? Слова и заметки из неё тоже удалятся.')) return;
   await files.del(b.id);
-  if (CLOUD && user) { try { await sb.storage.from('books').remove([bookPath(b)]); } catch (e) {} }
+  if (CLOUD && user && !b.cat) { try { await sb.storage.from('books').remove([bookPath(b)]); } catch (e) {} }
   books = books.filter(x => x.id !== b.id); words = words.filter(w => w.bookId !== b.id); notes = notes.filter(n => n.bookId !== b.id); marks = marks.filter(m => m.bookId !== b.id);
   saveBooks(); saveWords(); saveNotes(); saveMarks(); renderLib(); updBadge();
 }
@@ -378,7 +378,51 @@ $('#fileIn').onchange = async e => {
     } catch (err) { toast('Не удалось прочитать файл: ' + err.message, 5000); }
   }
 };
-$('#catBtn').onclick = () => toast('Каталог бесплатной классики появится вместе с облаком', 3200);
+/* ================= каталог бесплатной классики ================= */
+let catalog = null, catLvl = null;
+async function loadCatalog() { if (catalog) return catalog; const r = await fetch('catalog/catalog.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('каталог недоступен'); catalog = await r.json(); return catalog; }
+const fmtHours = n => { const h = n / 160 / 60; return h < 1 ? '≈ ' + Math.max(10, Math.round(h * 6) * 10) + ' мин' : '≈ ' + (h < 10 ? Math.round(h * 2) / 2 : Math.round(h)).toString().replace('.', ',') + ' ч'; };
+async function openCatalog() {
+  openModal([h('div', { style: 'display:flex;align-items:center;gap:10px;padding:8px 0' }, h('span', { class: 'spin' }), 'Загружаю каталог…')], { tall: true });
+  try { await loadCatalog(); } catch (e) { $('#modalBody').replaceChildren(h('div', { class: 'err', text: 'Не удалось открыть каталог: ' + e.message })); return; }
+  if (catLvl == null) catLvl = S.level || 'all';
+  renderCatalog();
+}
+function renderCatalog() {
+  const have = new Set(books.filter(b => b.cat).map(b => b.cat));
+  const lv = catLvl, list = catalog.filter(x => lv === 'all' || x.level === lv);
+  const chip = (v, label) => h('button', { class: 'chip' + (lv === v ? ' on' : ''), 'aria-pressed': String(lv === v), onclick: () => { catLvl = v; renderCatalog(); $('#modalBody').scrollTop = 0; } }, label);
+  const items = list.map(x => {
+    const inLib = have.has(x.id);
+    return h('li', { class: 'cat-it' },
+      h('img', { class: 'cat-cv', src: 'catalog/covers/' + x.id + '.jpg', alt: '', loading: 'lazy', width: '64', height: '96' }),
+      h('div', { class: 'cat-tx' },
+        h('b', { lang: 'en', text: x.title }), h('span', { class: 'muted', style: 'font-size:13px', lang: 'en', text: x.author }),
+        h('span', { class: 'cat-meta' }, h('i', { class: 'lv', text: x.level }), fmtHours(x.words) + ' · ' + Math.round(x.words / 1000) + ' тыс. слов'),
+        h('p', { text: x.about }),
+        inLib ? h('button', { class: 'btn', style: 'min-height:38px;font-size:14px;align-self:flex-start', onclick: () => { const b = books.find(b => b.cat === x.id); closeModal(); if (b) openBook(b); } }, ico('check', 18), 'Читать')
+          : h('button', { class: 'btn dark', style: 'min-height:38px;font-size:14px;align-self:flex-start', onclick: e => addFromCatalog(x, e.currentTarget) }, 'Добавить в библиотеку')));
+  });
+  $('#modalBody').replaceChildren(
+    h('h3', { style: 'margin:0;font-family:var(--serif);font-size:22px', text: 'Бесплатная классика' }),
+    h('p', { class: 'muted', style: 'margin:-8px 0 0;font-size:14px', text: 'Книги из общественного достояния в изданиях Standard Ebooks. Добавляются одним нажатием и не занимают место в вашем облаке.' }),
+    h('div', { class: 'chips cat-chips' }, chip('all', 'Все · ' + catalog.length), LEVELS.map(([c, n]) => chip(c, c + ' · ' + n.toLowerCase()))),
+    S.level && lv === S.level ? h('p', { style: 'margin:-8px 0 -8px;font-size:13px;color:var(--accent);font-weight:600', text: 'Подобрано под ваш уровень' }) : null,
+    h('ul', { class: 'cat-list' }, items.length ? items : h('li', { class: 'muted', text: 'Нет книг этого уровня' })));
+}
+async function addFromCatalog(x, btn) {
+  if (books.some(b => b.cat === x.id)) return;
+  btn.disabled = true; btn.replaceChildren(h('span', { class: 'spin' }), ' Скачиваю…');
+  try {
+    const r = await fetch('catalog/' + x.id + '.epub'); if (!r.ok) throw new Error('файл недоступен');
+    const buf = await r.arrayBuffer();
+    const nb = { id: 'cat-' + x.id, cat: x.id, title: x.title, author: x.author, cover: 'catalog/covers/' + x.id + '.jpg', added: Date.now(), up: true, pct: 0 };
+    await files.put(nb.id, buf);
+    books.unshift(nb); saveBooks(); renderLib(); buzz(10);
+    toast('Добавлено: ' + x.title); renderCatalog();
+  } catch (e) { btn.disabled = false; btn.textContent = 'Повторить'; toast('Не удалось скачать: ' + e.message, 4000); }
+}
+$('#catBtn').onclick = openCatalog;
 
 /* ================= слова ================= */
 function renderWords() {
@@ -596,7 +640,12 @@ async function openBook(b, atCfi) {
   try { if (rendition) rendition.destroy(); if (book) book.destroy(); } catch (e) {}
   rendition = null; book = null; spineChars = null; navToc = []; selCfi = null;
   let buf; try { buf = await files.get(b.id); } catch (e) {}
-  if (!buf && CLOUD && user) {
+  if (!buf && b.cat) {
+    $('#loading').lastChild.textContent = 'Скачиваю книгу…';
+    try { const r = await fetch('catalog/' + b.cat + '.epub'); if (!r.ok) throw new Error(r.status); buf = await r.arrayBuffer(); await files.put(b.id, buf); } catch (e) { console.warn(e); }
+    $('#loading').lastChild.textContent = 'Открываю книгу…';
+  }
+  if (!buf && CLOUD && user && !b.cat) {
     $('#loading').lastChild.textContent = 'Скачиваю книгу…';
     try { const r = await sb.storage.from('books').download(bookPath(b)); if (r.error) throw r.error; buf = await r.data.arrayBuffer(); await files.put(b.id, buf); } catch (e) { console.warn(e); }
     $('#loading').lastChild.textContent = 'Открываю книгу…';
@@ -609,7 +658,9 @@ async function openBook(b, atCfi) {
     attachInput(contents);
   });
   applyReader();
-  try { await rendition.display(atCfi || b.cfi || undefined); } catch (e) { try { await rendition.display(); } catch (e2) {} }
+  let start = atCfi || b.cfi || undefined;
+  if (!start && b.cat) { try { await bk.loaded.spine; const it = bk.spine.spineItems.find(x => !/(titlepage|imprint|halftitle)/i.test(x.href || '')); if (it) start = it.href; } catch (e) {} } // книги каталога: сразу к тексту, без служебных страниц
+  try { await rendition.display(start); } catch (e) { try { await rendition.display(); } catch (e2) {} }
   $('#loading').style.display = 'none';
   if (book !== bk) return;
   b.lastRead = Date.now(); saveBooks();
