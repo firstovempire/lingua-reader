@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#357A67"/><stop offset="1" stop-color="#265C4E"/></linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#g)"/>
+  <!-- страница -->
+  <rect x="232" y="196" width="560" height="632" rx="56" fill="#FBF8F1"/>
+  <path d="M232 700h560v72a56 56 0 0 1-56 56H288a56 56 0 0 1-56-56z" fill="#EFE8DA"/>
+  <!-- маркер под словом -->
+  <rect x="300" y="472" width="250" height="92" rx="14" fill="#F6E3A1"/>
+  <text x="425" y="540" text-anchor="middle" font-family="Literata, Georgia, serif" font-size="300" font-weight="600" fill="#2A2620">a</text>
+  <text x="640" y="560" text-anchor="middle" font-family="Literata, Georgia, serif" font-size="210" font-weight="600" fill="#2F6F5E">я</text>
+  <rect x="300" y="620" width="340" height="18" rx="9" fill="#D9CFBC"/>
+  <rect x="300" y="664" width="250" height="18" rx="9" fill="#D9CFBC"/>
+</svg>

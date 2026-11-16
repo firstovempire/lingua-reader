@@ -156,7 +156,8 @@ const FONTS = [
   { id: 'lor', name: 'Lora', css: 'Lora, Georgia, serif' },
   { id: 'int', name: 'Inter', css: 'Inter, system-ui, sans-serif' }
 ];
-const FONT_URL = 'https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Merriweather:ital,wght@0,400;0,700;1,400&family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;600&display=swap';
+const FONT_Q = { lit: 'Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400', mer: 'Merriweather:ital,wght@0,400;0,700;1,400', pts: 'PT+Serif:ital,wght@0,400;0,700;1,400', lor: 'Lora:ital,wght@0,400;0,600;1,400', int: 'Inter:ital,wght@0,400;0,600;1,400' };
+const fontUrl = id => 'https://fonts.googleapis.com/css2?family=' + (FONT_Q[id] || FONT_Q.lit) + '&display=swap'; // в книгу грузим только выбранный шрифт
 const LH = { s: 1.45, m: 1.62, l: 1.85 }, GUT = { s: 16, m: 26, l: 40 };
 const THEME = {
   paper: { page: '#FBF8F1', text: '#2A2620', sel: '#F6E3A1', selOp: '0.75', blend: 'multiply', saved: '#6FAF98', quote: '#F6E3A1' },
@@ -358,7 +359,7 @@ function renderLib() {
 }
 async function delBook(b) {
   if (!confirm('Удалить «' + b.title + '»? Слова и заметки из неё тоже удалятся.')) return;
-  await files.del(b.id);
+  await files.del(b.id); files.del(b.id + '#loc1000');
   if (CLOUD && user && !b.cat) { try { await sb.storage.from('books').remove([bookPath(b)]); } catch (e) {} }
   books = books.filter(x => x.id !== b.id); words = words.filter(w => w.bookId !== b.id); notes = notes.filter(n => n.bookId !== b.id); marks = marks.filter(m => m.bookId !== b.id);
   saveBooks(); saveWords(); saveNotes(); saveMarks(); renderLib(); updBadge();
@@ -654,7 +655,7 @@ async function openBook(b, atCfi) {
   const bk = ePub(buf); book = bk;
   rendition = book.renderTo('viewer', { width: '100%', height: '100%', flow: 'paginated', spread: 'none', allowScriptedContent: false, minSpreadWidth: 99999 });
   rendition.hooks.content.register(contents => {
-    try { contents.addStylesheet(FONT_URL); } catch (e) {}
+    try { contents.addStylesheet(fontUrl(S.font)); } catch (e) {}
     attachInput(contents);
   });
   applyReader();
@@ -673,7 +674,13 @@ async function openBook(b, atCfi) {
   try { rendition.getContents().forEach(c => underlineSaved(c)); } catch (e) {}
   notes.filter(n => n.bookId === b.id && n.cfi).forEach(addQuoteMark);
   bk.loaded.navigation.then(nav => { if (book !== bk) return; navToc = flatToc(nav.toc); markChapter(lastLoc); }).catch(() => {});
-  bk.ready.then(() => book === bk && bk.locations.generate(1000)).then(() => { if (book !== bk) return; buildSpineChars(); updProgress(lastLoc); }).catch(() => {});
+  bk.ready.then(async () => {
+    if (book !== bk) return;
+    const LK = b.id + '#loc1000'; let saved = null; try { saved = await files.get(LK); } catch (e) {}
+    if (saved) { try { bk.locations.load(saved); } catch (e) { saved = null; } }
+    if (!saved || !bk.locations.length()) { await bk.locations.generate(1000); try { files.put(LK, bk.locations.save()); } catch (e) {} } // один раз на книгу
+    if (book !== bk) return; buildSpineChars(); updProgress(lastLoc);
+  }).catch(() => {});
   if (atCfi) setTimeout(() => { try { rendition.annotations.highlight(atCfi, {}, null, 'lr-flash', { fill: THEME[S.theme].sel, 'fill-opacity': '0.8' }); setTimeout(() => { try { rendition.annotations.remove(atCfi, 'highlight'); } catch (e) {} }, 1600); } catch (e) {} }, 400);
 }
 function flatToc(items, d = 0, out = []) { (items || []).forEach(it => { out.push({ href: it.href, label: norm(it.label), depth: d }); flatToc(it.subitems, d + 1, out); }); return out; }
@@ -728,6 +735,7 @@ function applyReader() {
     'img': { 'max-width': '100% !important', 'height': 'auto !important' },
     '::selection': { 'background': T.sel, 'color': 'inherit' }
   });
+  try { rendition.getContents().forEach(ct => ct.addStylesheet(fontUrl(S.font))); } catch (e) {}
   rendition.themes.fontSize(Math.round(S.size / 16 * 100) + '%');
   try { rendition.resize(); } catch (e) {}
 }
