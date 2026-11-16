@@ -653,7 +653,15 @@ async function openBook(b, atCfi) {
   }
   if (!buf) { $('#loading').style.display = 'none'; toast('Файл книги не найден в этом браузере', 4000); show('Lib'); return; }
   const bk = ePub(buf); book = bk;
-  rendition = book.renderTo('viewer', { width: '100%', height: '100%', flow: 'paginated', spread: 'none', allowScriptedContent: false, minSpreadWidth: 99999 });
+  // iOS Safari не передаёт касания в iframe без allow-scripts, поэтому скрипты разрешаем,
+  // а сами скрипты и обработчики из книги вырезаем до показа (защита от «вредных» EPUB)
+  bk.spine.hooks.content.register(doc => {
+    try {
+      doc.querySelectorAll('script, iframe, object, embed, base, meta[http-equiv]').forEach(el => el.remove());
+      doc.querySelectorAll('*').forEach(el => { for (const at of [...el.attributes]) { const n = at.name.toLowerCase(), v = (at.value || '').trim().toLowerCase(); if (n.startsWith('on') || ((n === 'href' || n === 'src' || n.endsWith(':href') || n === 'xlink:href') && v.startsWith('javascript:'))) el.removeAttribute(at.name); } });
+    } catch (e) {}
+  });
+  rendition = book.renderTo('viewer', { width: '100%', height: '100%', flow: 'paginated', spread: 'none', allowScriptedContent: true, minSpreadWidth: 99999 });
   rendition.hooks.content.register(contents => {
     try { contents.addStylesheet(fontUrl(S.font)); } catch (e) {}
     attachInput(contents);
@@ -728,7 +736,7 @@ function applyReader() {
   if (!rendition) return;
   const T = THEME[S.theme], F = (FONTS.find(f => f.id === S.font) || FONTS[0]).css;
   rendition.themes.default({
-    'html': { 'background': T.page + ' !important' },
+    'html': { 'background': T.page + ' !important', 'touch-action': 'none' },
     'body': { 'font-family': F + ' !important', 'line-height': LH[S.lh] + ' !important', 'color': T.text + ' !important', 'background': 'transparent !important', '-webkit-text-size-adjust': '100%', '-webkit-touch-callout': 'none' },
     'p, li, div, span, blockquote, td': { 'font-family': 'inherit !important', 'line-height': 'inherit !important', 'color': 'inherit !important' },
     'a': { 'color': 'inherit !important' },
@@ -759,19 +767,44 @@ let pt = null;
 function attachInput(contents) {
   const doc = contents.document, win = contents.window;
   doc.addEventListener('pointerdown', act, true); doc.addEventListener('keydown', act, true);
-  doc.addEventListener('pointerdown', e => { pt = { x: e.clientX, y: e.clientY, sx: e.screenX, sy: e.screenY, t: Date.now(), type: e.pointerType }; }, { passive: true });
-  doc.addEventListener('pointerup', e => {
+  const down = (x, y, sx, sy) => { pt = { x, y, sx, sy, t: Date.now() }; };
+  const up = (ev, x, y, sx, sy) => {
     if (!pt) return; const p = pt; pt = null;
-    const dx = e.screenX - p.sx, dy = e.screenY - p.sy, dt = Date.now() - p.t;
+    const dx = sx - p.sx, dy = sy - p.sy, dt = Date.now() - p.t;
     if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 700) { killTapHint(); closeSheet(); dx < 0 ? next() : prev(); return; }
     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return;
     const sel = win.getSelection(); if (sel && !sel.isCollapsed && norm(sel.toString())) return; // выделение мышью — обработает 'selected'
-    onTap(e, contents);
-  });
+    onTap({ clientX: x, clientY: y }, contents);
+  };
+  // касания (iPhone/Android) — через touch-события: в Safari они надёжнее pointer-событий внутри iframe
+  doc.addEventListener('touchstart', e => { const t = e.changedTouches[0]; if (e.touches.length > 1) { pt = null; return; } down(t.clientX, t.clientY, t.screenX, t.screenY); }, { passive: true });
+  doc.addEventListener('touchend', e => { const t = e.changedTouches[0]; up(e, t.clientX, t.clientY, t.screenX, t.screenY); });
+  doc.addEventListener('touchcancel', () => { pt = null; });
+  // мышь и перо
+  doc.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') return; down(e.clientX, e.clientY, e.screenX, e.screenY); }, { passive: true });
+  doc.addEventListener('pointerup', e => { if (e.pointerType === 'touch') return; up(e, e.clientX, e.clientY, e.screenX, e.screenY); });
   doc.addEventListener('keyup', keyNav);
   doc.addEventListener('contextmenu', e => { if (p_isTouch()) e.preventDefault(); });
 }
 const p_isTouch = () => matchMedia('(pointer:coarse)').matches;
+// касания по полям вокруг текста (вне iframe книги): края листают, середина — меню, свайп — листает
+(() => {
+  const scr = $('#sReader'); let p0 = null;
+  const skip = t => t.closest('button, a, input, #rtop, #rbottom, #sheet, #bubble, #modal, iframe');
+  const down = (t, x, y) => { p0 = skip(t) ? null : { x, y, t: Date.now() }; };
+  const up = (x, y) => {
+    if (!p0 || !rendition) { p0 = null; return; } const p = p0; p0 = null; const dx = x - p.x, dy = y - p.y;
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - p.t < 700) { killTapHint(); closeSheet(); dx < 0 ? next() : prev(); return; }
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return;
+    killTapHint();
+    if (isBubble()) { closeBubble(); return; } if (isSheetOpen()) { closeSheet(); return; }
+    const w = window.innerWidth; if (x < w * 0.3) prev(); else if (x > w * 0.7) next(); else toggleChrome(!document.body.classList.contains('chrome'));
+  };
+  scr.addEventListener('touchstart', e => { const t = e.changedTouches[0]; down(e.target, t.clientX, t.clientY); }, { passive: true });
+  scr.addEventListener('touchend', e => { const t = e.changedTouches[0]; up(t.clientX, t.clientY); });
+  scr.addEventListener('pointerdown', e => { if (e.pointerType !== 'touch') down(e.target, e.clientX, e.clientY); });
+  scr.addEventListener('pointerup', e => { if (e.pointerType !== 'touch') up(e.clientX, e.clientY); });
+})();
 const next = () => { buzz(4); rendition && rendition.next(); }, prev = () => { buzz(4); rendition && rendition.prev(); };
 let tapHintT = null;
 function killTapHint() { clearTimeout(tapHintT); $('#tapHint').classList.remove('on'); }
