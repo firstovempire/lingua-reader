@@ -18,6 +18,6 @@ jobs:
         with:
           version: latest
       - name: Deploy translate
-        run: supabase functions deploy translate --project-ref cbxhdemmwxzmksuthzue --no-verify-jwt
+        run: supabase functions deploy translate --remote=cbxhdemmwxzmksuthzue --no-verify-jwt --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
