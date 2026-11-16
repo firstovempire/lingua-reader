@@ -50,7 +50,7 @@ let user = null, keyLast4 = '', lastRegion = '', lastModel = '', loggedFor = '';
 const REGION_NAMES = { 'eu-west-3': 'Париж', 'eu-central-1': 'Франкфурт', 'eu-west-1': 'Ирландия', 'eu-west-2': 'Лондон' };
 
 /* ================= данные ================= */
-const DEF = { level: '', font: 'lit', size: 19, lh: 'm', margin: 'm', theme: 'paper', model: 'gemini-3.5-flash-lite' };
+const DEF = { level: '', font: 'lit', size: 19, lh: 'm', margin: 'm', theme: 'paper', model: 'gemini-3.5-flash-lite', revDir: 'en', sound: true };
 let S = Object.assign({}, DEF, LS.get('lr_s', {}));
 const fixModel = () => { if (!S.model || /^gemini-(2\.5|3\.8)-flash$/.test(S.model)) S.model = DEF.model; };
 fixModel();
@@ -156,7 +156,7 @@ function show(name) {
   if (name === 'Lib') renderLib();
   if (name === 'Words') renderWords();
   if (name === 'Profile') renderProfile();
-  if (name === 'Review') $('#revCount').textContent = words.length;
+  if (name === 'Review') { if (rv && rv.pos >= rv.queue.length && !rv.got.length && !rv.miss.length) rv = null; renderReview(); }
   updBadge();
 }
 $$('#tabbar button').forEach(b => b.onclick = () => show(b.dataset.go));
@@ -369,6 +369,135 @@ function renderWords() {
   }
 }
 $('#wSearch').oninput = renderWords;
+
+/* ================= повторение (карточки) ================= */
+const DAY = 86400000, INTERVALS = [1, 3, 7, 21, 60], SWIPE = 90;
+let rv = null; // { mode, queue:[id], pos, shown, got:[id], miss:[id] }
+const isDue = w => (w.due || 0) <= Date.now();
+const wById = id => words.find(w => w.id === id);
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+function startRound(mode) {
+  let list;
+  if (mode === 'missed') list = words.filter(w => w.missed);
+  else if (mode === 'all') list = shuffle(words.slice());
+  else list = words.filter(isDue).sort((a, b) => (a.due || 0) - (b.due || 0));
+  rv = { mode, queue: list.slice(0, 60).map(w => w.id), pos: 0, shown: false, got: [], miss: [] };
+}
+let audioCtx = null;
+function beep(good) {
+  if (S.sound === false) return;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    audioCtx = audioCtx || new AC(); const ac = audioCtx, t = ac.currentTime;
+    (good ? [[660, 0], [990, 0.07]] : [[240, 0], [180, 0.06]]).forEach(([f, d]) => {
+      const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(good ? 0.07 : 0.06, t + d + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.16);
+      o.connect(g); g.connect(ac.destination); o.start(t + d); o.stop(t + d + 0.18);
+    });
+  } catch (e) {}
+}
+function markSentence(s, word, blank) {
+  const span = h('span', { lang: 'en', class: 'rv-sent' }); const i = (s || '').toLowerCase().indexOf((word || '').toLowerCase());
+  if (i < 0) { span.textContent = s || ''; return span; }
+  span.append(s.slice(0, i), blank ? h('span', { class: 'rv-blank', text: ' '.repeat(Math.max(6, word.length + 2)) }) : h('mark', { text: s.slice(i, i + word.length) }), s.slice(i + word.length));
+  return span;
+}
+const ARROW_L = '<path d="M42 6C26 4 12 12 10 32"/><path d="M3 25l7 8 7-7"/>', ARROW_R = '<path d="M6 6c16-2 30 6 32 26"/><path d="M45 25l-7 8-7-7"/>';
+function svgEl(inner, vb, cls) { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', vb); s.setAttribute('aria-hidden', 'true'); if (cls) s.setAttribute('class', cls); s.innerHTML = inner; return s; }
+function renderReview() {
+  const box = $('#revBox'); box.innerHTML = ''; updBadge();
+  const sound = h('button', { class: 'icobtn', 'aria-label': 'Звук', 'aria-pressed': String(S.sound !== false), onclick: () => { S.sound = S.sound === false; saveS(); renderReview(); toast(S.sound === false ? 'Звук выключен' : 'Звук включён', 1200); } }, svgEl(S.sound === false ? '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M16 9l5 6M21 9l-5 6"/>' : P.speak, '0 0 24 24', 'i'));
+  const head = h('header', { style: 'display:flex;align-items:center;gap:8px' }, h('h1', { class: 'title', style: 'flex:1' }, 'Повторение'));
+  box.append(head);
+  if (!words.length) { box.append(h('div', { class: 'card', style: 'padding:22px;display:flex;flex-direction:column;gap:8px' }, h('b', { style: 'font-size:17px', text: 'Пока нечего повторять' }), h('span', { class: 'muted', text: 'Коснитесь слова в книге и нажмите ★ — оно появится здесь.' }))); return; }
+  if (!rv) startRound('due');
+  const total = rv.queue.length, done = rv.pos >= total;
+  head.append(h('span', { class: 'muted', style: 'font-size:15px', text: total ? (done ? 'Круг пройден' : (rv.pos + 1) + ' из ' + total) : '' }), sound);
+  // направление
+  box.append(h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Что показывать сначала' }, [['en', 'EN → RU', 'слово'], ['ru', 'RU → EN', 'перевод'], ['mix', 'Вперемешку', 'оба']].map(([v, t, sub]) =>
+    h('button', { role: 'radio', 'aria-checked': String((S.revDir || 'en') === v), style: 'min-height:46px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px', onclick: () => { S.revDir = v; saveS(); if (rv) rv.shown = false; renderReview(); } }, h('span', { text: t }), h('small', { style: 'font-size:11px;font-weight:500;color:var(--ink2)', text: sub })))));
+  // режимы
+  const dueN = words.filter(isDue).length, missN = words.filter(w => w.missed).length;
+  const chip = (on, label, fn, dot) => h('button', { class: 'chip' + (on ? ' on' : ''), 'aria-pressed': String(on), onclick: fn }, dot ? h('i', { class: 'dot' }) : null, label);
+  box.append(h('div', { class: 'chips' },
+    chip(rv.mode === 'due', 'На сегодня · ' + dueN, () => { startRound('due'); renderReview(); }),
+    chip(rv.mode === 'missed', 'Не угаданные · ' + missN, () => { if (!missN) { toast('Не угаданных пока нет'); return; } startRound('missed'); renderReview(); }, true),
+    chip(rv.mode === 'all', 'Все · ' + words.length, () => { startRound('all'); renderReview(); })));
+  box.append(h('div', { class: 'bar', style: 'height:6px;border-radius:3px' }, h('i', { style: `width:${total ? Math.round(Math.min(rv.pos, total) / total * 100) : 0}%` })));
+
+  if (!total) {
+    const next = words.filter(w => !isDue(w)).map(w => w.due).sort((a, b) => a - b)[0];
+    box.append(h('div', { class: 'card', style: 'padding:28px 22px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center' },
+      h('span', { class: 'rv-ok' }, ico('check', 34)), h('b', { style: 'font-family:var(--serif);font-size:22px', text: rv.mode === 'missed' ? 'Не угаданных нет' : 'На сегодня всё' }),
+      next ? h('span', { class: 'muted', text: 'Следующее повторение: ' + new Date(next).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) }) : null,
+      h('button', { class: 'btn', onclick: () => { startRound('all'); renderReview(); } }, 'Повторить все слова')));
+    return;
+  }
+  if (done) { renderResult(box); return; }
+
+  const w = wById(rv.queue[rv.pos]); if (!w) { rv.pos++; renderReview(); return; }
+  const dir = S.revDir || 'en', ruFirst = dir === 'ru' || (dir === 'mix' && rv.pos % 2 === 1);
+  const b = books.find(x => x.id === w.bookId);
+  const ok = h('div', { class: 'rv-ov ok' }, svgEl('<circle cx="60" cy="60" r="52" stroke-width="4" opacity=".35"/><path d="M36 62l16 16 32-36"/>', '0 0 120 120'));
+  const no = h('div', { class: 'rv-ov no' }, svgEl('<circle cx="60" cy="60" r="52" stroke-width="4" opacity=".35"/><path d="M42 42l36 36M78 42L42 78"/>', '0 0 120 120'));
+  const card = h('div', { class: 'rv-card enter', role: 'button', tabindex: '0', 'aria-label': rv.shown ? 'Карточка' : 'Показать ответ' }, ok, no,
+    h('span', { class: 'rv-book', text: b ? b.title : '' }));
+  if (ruFirst) card.append(h('span', { class: 'rv-tr', text: w.tr || '' }), markSentence(w.s, w.w, !rv.shown));
+  else card.append(h('span', { class: 'rv-word', lang: 'en', text: w.w }), markSentence(w.s, w.w, false));
+  if (!rv.shown) card.append(h('span', { class: 'muted', style: 'font-size:14px', text: ruFirst ? 'Вспомните слово на английском · коснитесь, чтобы проверить' : 'Вспомните перевод · коснитесь, чтобы проверить' }));
+  else {
+    const back = h('div', { class: 'rv-back' },
+      ruFirst ? h('span', { class: 'rv-word', lang: 'en', text: w.w }) : h('span', { class: 'rv-tr', text: w.tr || '' }),
+      w.tc ? h('span', { class: 'muted', style: 'font-size:14px', text: w.tc }) : null,
+      w.exp ? h('span', { style: 'font-size:14px;color:var(--ink2)', text: w.exp }) : null);
+    const ex = Array.isArray(w.ex) ? w.ex[0] : w.ex; if (ex && ex.en) back.append(h('div', { class: 'sh-ex', style: 'text-align:left;margin-top:4px' }, h('div', { class: 'en', lang: 'en', text: ex.en }), h('div', { class: 'ru', text: ex.ru || '' })));
+    card.append(back);
+  }
+  card.append(h('button', { class: 'icobtn rv-speak', 'aria-label': 'Произнести', onclick: ev => { ev.stopPropagation(); speak(w.w); } }, ico('speak', 20)));
+  box.append(card);
+  box.append(h('div', { class: 'rv-hints' },
+    h('button', { class: 'rv-hint no', onclick: () => commit(card, false) }, svgEl(ARROW_L, '0 0 48 40'), h('span', null, h('b', null, 'Не угадал'), h('small', null, 'свайп влево'))),
+    h('button', { class: 'rv-hint ok', onclick: () => commit(card, true) }, h('span', null, h('b', null, 'Угадал'), h('small', null, 'свайп вправо')), svgEl(ARROW_R, '0 0 48 40'))));
+  requestAnimationFrame(() => requestAnimationFrame(() => card.classList.remove('enter')));
+  // жесты
+  let x0 = null, dx = 0, moved = false;
+  const setDx = d => { dx = d; card.style.transform = `translateX(${d}px) rotate(${(d / 22).toFixed(1)}deg)`; const k = Math.min(1, Math.abs(d) / SWIPE); ok.style.opacity = d > 0 ? k : 0; no.style.opacity = d < 0 ? k : 0; ok.firstChild.style.transform = no.firstChild.style.transform = `scale(${(0.7 + 0.3 * k).toFixed(2)})`; };
+  card.addEventListener('pointerdown', e => { if (e.target.closest('.rv-speak')) return; x0 = e.clientX; moved = false; card.style.transition = 'none'; try { card.setPointerCapture(e.pointerId); } catch (er) {} });
+  card.addEventListener('pointermove', e => { if (x0 == null) return; const d = e.clientX - x0; if (Math.abs(d) > 6) moved = true; setDx(d); });
+  const up = () => { if (x0 == null) return; x0 = null; card.style.transition = ''; if (dx > SWIPE) commit(card, true); else if (dx < -SWIPE) commit(card, false); else { setDx(0); ok.style.opacity = no.style.opacity = 0; if (!moved) { rv.shown = !rv.shown; renderReview(); } } };
+  card.addEventListener('pointerup', up); card.addEventListener('pointercancel', up);
+  card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); rv.shown = !rv.shown; renderReview(); } });
+}
+let committing = false;
+function commit(card, good) {
+  if (committing || !rv) return; committing = true;
+  const w = wById(rv.queue[rv.pos]);
+  beep(good); buzz(good ? 12 : 20);
+  card.style.transition = 'transform .3s cubic-bezier(.3,.6,.4,1), opacity .3s ease';
+  card.style.transform = `translateX(${good ? 130 : -130}%) rotate(${good ? 18 : -18}deg)`; card.style.opacity = '0';
+  const ov = card.querySelector(good ? '.rv-ov.ok' : '.rv-ov.no'); if (ov) ov.style.opacity = 1;
+  setTimeout(() => {
+    if (w) {
+      if (good) { w.box = Math.min((w.box || 0) + 1, INTERVALS.length); w.due = Date.now() + INTERVALS[w.box - 1] * DAY; w.missed = false; rv.got.push(w.id); }
+      else { w.box = 0; w.due = Date.now() + 10 * 60000; w.missed = true; rv.miss.push(w.id); }
+      w.seen = Date.now(); saveWords();
+    }
+    rv.pos++; rv.shown = false; committing = false; renderReview();
+  }, 280);
+}
+function renderResult(box) {
+  const list = (ids, cls) => h('div', { style: 'display:flex;flex-direction:column;gap:6px' }, ids.map(wById).filter(Boolean).map(w => h('div', { style: 'font-size:15px' }, h('b', { lang: 'en', text: w.w }), ' — ' + (w.tr || ''))));
+  box.append(h('h2', { style: 'margin:4px 0 0;font-family:var(--serif);font-size:22px;font-weight:600', text: 'Итог круга' }),
+    h('section', { class: 'card', style: 'padding:14px;display:flex;flex-direction:column;gap:8px' }, h('h3', { style: 'margin:0;font-size:14px;color:var(--accent);display:flex;gap:6px;align-items:center' }, ico('check', 18), 'Угадал · ' + rv.got.length), rv.got.length ? list(rv.got) : h('span', { class: 'muted', text: '—' })),
+    h('section', { class: 'card', style: 'padding:14px;display:flex;flex-direction:column;gap:8px' }, h('h3', { style: 'margin:0;font-size:14px;color:var(--warn);display:flex;gap:8px;align-items:center' }, h('i', { class: 'dot' }), 'Не угадал · ' + rv.miss.length), rv.miss.length ? list(rv.miss) : h('span', { class: 'muted', text: 'Все слова угаданы' })));
+  if (rv.miss.length) box.append(h('button', { class: 'btn primary big', onclick: () => { rv = { mode: 'missed', queue: shuffle(rv.miss.slice()), pos: 0, shown: false, got: [], miss: [] }; renderReview(); } }, 'Прогнать не угаданные · ' + rv.miss.length));
+  box.append(h('button', { class: 'btn big', onclick: () => { startRound('due'); renderReview(); } }, 'Готово'));
+}
+document.addEventListener('keydown', e => {
+  if (current !== 'Review' || !rv || rv.pos >= rv.queue.length || /INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) return;
+  const card = $('#revBox .rv-card'); if (!card) return;
+  if (e.key === 'ArrowRight') commit(card, true); else if (e.key === 'ArrowLeft') commit(card, false);
+});
 
 /* ================= профиль ================= */
 function renderProfile() {

@@ -200,6 +200,35 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 .qcard .q{font-family:var(--serif);font-size:16px;line-height:1.5;background:linear-gradient(transparent 62%,var(--hl) 62%);text-align:left;border:0;padding:0}
 .qcard .lbl{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
 
+/* ---------- повторение ---------- */
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -2px;padding:0 2px}.chips::-webkit-scrollbar{display:none}
+#revBadge[hidden]{display:none!important}
+.chip{flex:none;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 11px;border-radius:999px;border:1px solid var(--line2);background:transparent;font-size:13px;font-weight:600;color:var(--ink)}
+.chip.on{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warn-dot);flex:none}
+.rv-card{position:relative;flex:none;min-height:clamp(280px,calc(100dvh - 430px),460px);background:var(--paper);border:1px solid var(--line);border-radius:22px;padding:30px 22px 26px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;touch-action:pan-y;user-select:none;-webkit-user-select:none;cursor:grab;box-shadow:0 8px 24px rgba(0,0,0,.06);transition:transform .22s ease,opacity .22s ease;outline:none}
+.rv-card.enter{transform:scale(.96);opacity:0}
+.rv-card:focus-visible{box-shadow:0 0 0 3px var(--accent)}
+.rv-ov{position:absolute;inset:0;border-radius:22px;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;z-index:2}
+.rv-ov svg{width:132px;height:132px;fill:none;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;transition:transform .05s}
+.rv-ov.ok{background:color-mix(in srgb,var(--accent) 9%,transparent)} .rv-ov.ok svg{stroke:var(--accent)}
+.rv-ov.no{background:color-mix(in srgb,var(--warn-dot) 9%,transparent)} .rv-ov.no svg{stroke:var(--warn-dot)}
+.rv-book{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.rv-word{font-family:var(--serif);font-size:34px;font-weight:600;line-height:1.15;word-break:break-word}
+.rv-tr{font-size:28px;font-weight:700;color:var(--accent);line-height:1.2}
+.rv-sent{font-family:var(--serif);font-size:17px;line-height:1.55;color:var(--ink2)}
+.rv-blank{display:inline-block;border-bottom:2px solid var(--ink);min-width:60px}
+.rv-back{display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:14px;border-top:1px solid var(--line);width:100%}
+.rv-speak{position:absolute;right:8px;top:8px;color:var(--muted);z-index:3}
+.rv-hints{display:flex;justify-content:space-between;align-items:flex-end}
+.rv-hint{display:flex;align-items:flex-end;gap:6px;min-height:52px;padding:0 6px;border:0;background:transparent}
+.rv-hint svg{width:44px;height:36px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.rv-hint span{display:flex;flex-direction:column;padding-bottom:2px}
+.rv-hint.no{color:var(--warn)} .rv-hint.no span{align-items:flex-start}
+.rv-hint.ok{color:var(--accent)} .rv-hint.ok span{align-items:flex-end}
+.rv-hint b{font-size:15px} .rv-hint small{font-size:12px;color:var(--muted)}
+.rv-ok{width:64px;height:64px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center}
+
 /* ---------- desktop: панели справа ---------- */
 @media (min-width:900px){
   #sheet{left:auto;top:0;width:400px;max-height:none!important;height:100dvh!important;border-radius:0;transform:translateX(105%);box-shadow:-10px 0 30px rgba(0,0,0,.08);border-left:1px solid var(--line)}
@@ -315,13 +344,7 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 
 <!-- заглушка повторения -->
 <section id="sReview" class="screen" aria-label="Повторение">
-  <div class="scroll"><div class="wrap">
-    <h1 class="title">Повторение</h1>
-    <div class="card" style="padding:22px;display:flex;flex-direction:column;gap:8px">
-      <b style="font-size:17px">Карточки появятся на следующем шаге</b>
-      <span class="muted">Свайп вправо — угадал, влево — не угадал, со звуком и стопкой «Не угаданные». Сохранённые слова уже копятся: <b id="revCount">0</b>.</span>
-    </div>
-  </div></div>
+  <div class="scroll"><div class="wrap" id="revBox" style="gap:14px;min-height:100%"></div></div>
 </section>
 
 <!-- профиль -->
