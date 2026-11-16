@@ -1,5 +1,32 @@
 [
 {
+"id": "beatrix-potter_short-fiction",
+"title": "The Tale of Peter Rabbit and Other Tales",
+"author": "Beatrix Potter",
+"level": "A1",
+"words": 31793,
+"size": 11691252,
+"about": "«Кролик Питер» и ещё 21 сказка Беатрис Поттер. Очень короткие истории, простые фразы и акварельная картинка почти на каждой странице."
+},
+{
+"id": "rudyard-kipling_just-so-stories",
+"title": "Just So Stories",
+"author": "Rudyard Kipling",
+"level": "A2",
+"words": 34631,
+"size": 2255139,
+"about": "«Сказки просто так»: откуда у слона хобот, а у леопарда пятна. Короткие сказки, которые читаются за вечер."
+},
+{
+"id": "jacob-grimm_wilhelm-grimm_household-tales_margaret-hunt",
+"title": "Grimms’ Fairy Tales",
+"author": "Jacob and Wilhelm Grimm",
+"level": "A2",
+"words": 285038,
+"size": 823216,
+"about": "Сказки братьев Гримм: Золушка, Белоснежка, Гензель и Гретель — больше двухсот историй, сюжеты которых вы уже знаете."
+},
+{
 "id": "oscar-wilde_childrens-stories",
 "title": "Children’s Stories",
 "author": "Oscar Wilde",
