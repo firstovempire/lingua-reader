@@ -28,7 +28,9 @@ const P = {
   star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/>',
   quote: '<path d="M7 7h4v4c0 3-1.5 5-4 6M15 7h4v4c0 3-1.5 5-4 6"/>', note: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
   mark: '<path d="M6 3h12v18l-6-4-6 4z"/>', check: '<path d="m5 12 5 5 9-10"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>',
-  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>', ext: '<path d="M7 17 17 7M9 7h8v8"/>'
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>', ext: '<path d="M7 17 17 7M9 7h8v8"/>',
+  flame: '<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5.3 1.6 1 2.6 2 3 0-3 .5-5.5 1-8.5z"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'
 };
 const ico = (n, size = 22, extra = '') => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'i'); s.setAttribute('aria-hidden', 'true'); s.style.cssText = `width:${size}px;height:${size}px;${extra}`; s.innerHTML = P[n]; return s; };
 const LS = {
@@ -50,7 +52,7 @@ let user = null, keyLast4 = '', lastRegion = '', lastModel = '', loggedFor = '';
 const REGION_NAMES = { 'eu-west-3': 'Париж', 'eu-central-1': 'Франкфурт', 'eu-west-1': 'Ирландия', 'eu-west-2': 'Лондон' };
 
 /* ================= данные ================= */
-const DEF = { level: '', font: 'lit', size: 19, lh: 'm', margin: 'm', theme: 'paper', model: 'gemini-3.5-flash-lite', revDir: 'en', sound: true };
+const DEF = { level: '', font: 'lit', size: 19, lh: 'm', margin: 'm', theme: 'paper', model: 'gemini-3.5-flash-lite', revDir: 'en', sound: true, goal: 10 };
 let S = Object.assign({}, DEF, LS.get('lr_s', {}));
 const fixModel = () => { if (!S.model || /^gemini-(2\.5|3\.8)-flash$/.test(S.model)) S.model = DEF.model; };
 fixModel();
@@ -59,16 +61,20 @@ let books = LS.get('lr_books', []);
 let words = LS.get('lr_words', []);
 let notes = LS.get('lr_notes', []);
 let marks = LS.get('lr_marks', []);
+const DEV = LS.get('lr_dev', '') || (() => { const d = uid().slice(-6); LS.set('lr_dev', d); return d; })();
+let days = LS.get('lr_days', []);
+const saveDays = () => { LS.set('lr_days', days); schedule(); };
 const cache = LS.get('lr_cache', {});
 const saveBooks = () => { LS.set('lr_books', books); schedule(); }, saveWords = () => { LS.set('lr_words', words); schedule(); }, saveNotes = () => { LS.set('lr_notes', notes); schedule(); }, saveMarks = () => { LS.set('lr_marks', marks); schedule(); };
 const getKey = () => CLOUD ? (keyLast4 ? '••••' + keyLast4 : '') : LS.get('lr_key', '');
 
+const DAY = 86400000;
 /* --- синхронизация: локально сразу, на сервер с задержкой; сервер — главный --- */
-const EMPTY_SNAP = () => ({ book: {}, word: {}, note: {}, mark: {}, set: {} });
-let snap = LS.get('lr_snap', null) || EMPTY_SNAP();
+const EMPTY_SNAP = () => ({ book: {}, word: {}, note: {}, mark: {}, day: {}, set: {} });
+let snap = LS.get('lr_snap', null) || EMPTY_SNAP(); if (!snap.day) snap.day = {};
 let queue = LS.get('lr_queue', {});
 let syncT = null, syncing = false;
-const KARR = { book: () => books, word: () => words, note: () => notes, mark: () => marks };
+const KARR = { book: () => books, word: () => words, note: () => notes, mark: () => marks, day: () => days };
 function diffAll() {
   for (const k of Object.keys(KARR)) {
     const seen = new Set();
@@ -95,13 +101,13 @@ async function pull() {
   await flush();
   const all = [];
   for (let from = 0; ; from += 1000) { const r = await sb.from('items').select('kind,id,data,deleted').order('kind').order('id').range(from, from + 999); if (r.error) throw r.error; all.push(...r.data); if (r.data.length < 1000) break; }
-  const by = { book: [], word: [], note: [], mark: [] }; let set = null;
+  const by = { book: [], word: [], note: [], mark: [], day: [] }; let set = null;
   for (const row of all) { if (row.deleted) continue; if (row.kind === 'set') set = row.data; else if (by[row.kind]) by[row.kind].push(row.data); }
   for (const it of Object.values(queue)) { if (it.kind === 'set') continue; const arr = by[it.kind]; const i = arr.findIndex(x => x.id === it.id); if (it.data) { if (i >= 0) arr[i] = it.data; else arr.push(it.data); } else if (i >= 0) arr.splice(i, 1); }
   const byT = (a, b) => (b.t || b.added || 0) - (a.t || a.added || 0);
-  books = by.book.sort(byT); words = by.word.sort(byT); notes = by.note.sort(byT); marks = by.mark.sort(byT);
+  books = by.book.sort(byT); words = by.word.sort(byT); notes = by.note.sort(byT); marks = by.mark.sort(byT); days = by.day;
   if (set && !queue['set|S']) { S = Object.assign({}, DEF, set); fixModel(); }
-  LS.set('lr_books', books); LS.set('lr_words', words); LS.set('lr_notes', notes); LS.set('lr_marks', marks); LS.set('lr_s', S);
+  LS.set('lr_books', books); LS.set('lr_words', words); LS.set('lr_notes', notes); LS.set('lr_marks', marks); LS.set('lr_days', days); LS.set('lr_s', S);
   snap = EMPTY_SNAP();
   for (const k of Object.keys(KARR)) for (const o of KARR[k]()) snap[k][o.id] = JSON.stringify(o);
   snap.set.S = JSON.stringify(S);
@@ -117,6 +123,31 @@ async function uploadBook(b, buf) {
 async function ensureUploads() {
   for (const b of books.filter(x => !x.up)) { try { const buf = await files.get(b.id); if (buf) await uploadBook(b, buf); } catch (e) { console.warn('upload', e); } }
 }
+
+/* ================= статистика: дни, серия, цель ================= */
+// строка на день и устройство: id = YYYY-MM-DD_dev, чтобы два устройства не перетирали друг друга
+const dkey = (t = Date.now()) => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+function today() { const id = dkey() + '_' + DEV; let d = days.find(x => x.id === id); if (!d) { d = { id, date: dkey(), read: 0, rev: 0, got: 0 }; days.push(d); } return d; }
+function dayTotals() { const m = {}; for (const d of days) { const x = m[d.date] || (m[d.date] = { read: 0, rev: 0, got: 0, saved: 0 }); x.read += d.read || 0; x.rev += d.rev || 0; x.got += d.got || 0; } for (const w of words) if (w.t) { const k = dkey(w.t); (m[k] || (m[k] = { read: 0, rev: 0, got: 0, saved: 0 })).saved++; } return m; }
+const activeDay = x => x && (x.read >= 60 || x.rev > 0 || x.saved > 0);
+function streakInfo() {
+  const m = dayTotals(); let cur = 0; const t = new Date(); t.setHours(12, 0, 0, 0);
+  const todayOn = activeDay(m[dkey(t)]); if (!todayOn) t.setDate(t.getDate() - 1);
+  while (activeDay(m[dkey(t)])) { cur++; t.setDate(t.getDate() - 1); }
+  let best = 0, run = 0, prev = null;
+  for (const k of Object.keys(m).filter(k => activeDay(m[k])).sort()) { const d = new Date(k + 'T12:00:00'); run = prev && Math.round((d - prev) / DAY) === 1 ? run + 1 : 1; best = Math.max(best, run); prev = d; }
+  return { cur, best: Math.max(best, cur), todayOn, m };
+}
+// время чтения: считаем, пока открыта книга, вкладка видна и было действие за последние 2 минуты
+let lastAct = 0, readAcc = 0;
+const act = () => { lastAct = Date.now(); };
+setInterval(() => {
+  if (current !== 'Reader' || document.visibilityState !== 'visible' || Date.now() - lastAct > 120000) return;
+  readAcc += 5;
+  if (readAcc >= 60) { today().read += readAcc; readAcc = 0; saveDays(); }
+}, 5000);
+document.addEventListener('pointerdown', act, true); document.addEventListener('keydown', act, true);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && readAcc) { today().read += readAcc; readAcc = 0; saveDays(); } });
 
 const FONTS = [
   { id: 'lit', name: 'Literata', css: 'Literata, Georgia, serif' },
@@ -371,7 +402,7 @@ function renderWords() {
 $('#wSearch').oninput = renderWords;
 
 /* ================= повторение (карточки) ================= */
-const DAY = 86400000, INTERVALS = [1, 3, 7, 21, 60], SWIPE = 90;
+const INTERVALS = [1, 3, 7, 21, 60], SWIPE = 90;
 let rv = null; // { mode, queue:[id], pos, shown, got:[id], miss:[id] }
 const isDue = w => (w.due || 0) <= Date.now();
 const wById = id => words.find(w => w.id === id);
@@ -478,9 +509,9 @@ function commit(card, good) {
   const ov = card.querySelector(good ? '.rv-ov.ok' : '.rv-ov.no'); if (ov) ov.style.opacity = 1;
   setTimeout(() => {
     if (w) {
-      if (good) { w.box = Math.min((w.box || 0) + 1, INTERVALS.length); w.due = Date.now() + INTERVALS[w.box - 1] * DAY; w.missed = false; rv.got.push(w.id); }
+      if (good) { w.box = Math.min((w.box || 0) + 1, INTERVALS.length); w.due = Date.now() + INTERVALS[w.box - 1] * DAY; w.missed = false; rv.got.push(w.id); today().got++; }
       else { w.box = 0; w.due = Date.now() + 10 * 60000; w.missed = true; rv.miss.push(w.id); }
-      w.seen = Date.now(); saveWords();
+      w.seen = Date.now(); today().rev++; LS.set('lr_days', days); saveWords();
     }
     rv.pos++; rv.shown = false; committing = false; renderReview();
   }, 280);
@@ -500,10 +531,51 @@ document.addEventListener('keydown', e => {
 });
 
 /* ================= профиль ================= */
+const plural = (n, a, b, c) => { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? a : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? b : c; };
+const WD = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+function renderStats() {
+  const box = $('#profStats'); if (!box) return;
+  if (readAcc) { today().read += readAcc; readAcc = 0; saveDays(); }
+  const { cur, best, todayOn, m } = streakInfo();
+  const goal = S.goal || 10, todayMin = Math.floor(((m[dkey()] || {}).read || 0) / 60), k = Math.min(1, todayMin / goal);
+  const R = 26, C = 2 * Math.PI * R;
+  const ring = svgEl(`<circle cx="32" cy="32" r="${R}" fill="none" stroke="var(--line)" stroke-width="6"/><circle cx="32" cy="32" r="${R}" fill="none" stroke="var(--accent)" stroke-width="6" stroke-linecap="round" stroke-dasharray="${(C * k).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 32 32)"/>`, '0 0 64 64', 'ring');
+  const hero = h('div', { class: 'card st-hero' },
+    h('div', { class: 'st-streak' + (todayOn ? ' on' : '') }, ico('flame', 30),
+      h('div', null, h('b', { text: String(cur) }), h('span', { text: plural(cur, 'день подряд', 'дня подряд', 'дней подряд') }))),
+    h('button', { class: 'st-goal', 'aria-label': 'Цель на день: ' + goal + ' минут. Изменить', onclick: pickGoal }, h('div', { class: 'ringwrap' }, ring, h('span', { text: String(todayMin) })), h('small', { text: k >= 1 ? 'цель выполнена' : 'из ' + goal + ' мин' })),
+    h('p', { class: 'st-sub', text: todayOn ? (k >= 1 ? 'Сегодня всё сделано. Рекорд: ' + best + ' ' + plural(best, 'день', 'дня', 'дней') + '.' : 'Сегодня засчитано. Рекорд: ' + best + ' ' + plural(best, 'день', 'дня', 'дней') + '.') : cur ? 'Почитайте минуту или повторите слова, чтобы не прервать серию.' : 'Почитайте минуту или повторите слова — начнётся серия.' }));
+  // неделя
+  const list = []; const t = new Date(); t.setHours(12, 0, 0, 0); t.setDate(t.getDate() - 6);
+  for (let i = 0; i < 7; i++) { const key = dkey(t); list.push({ key, wd: WD[t.getDay()], min: Math.floor(((m[key] || {}).read || 0) / 60), on: activeDay(m[key]), today: i === 6 }); t.setDate(t.getDate() + 1); }
+  const wkMin = list.reduce((a, x) => a + x.min, 0), max = Math.max(goal, ...list.map(x => x.min));
+  let wkRev = 0, wkSaved = 0; for (const x of list) { wkRev += (m[x.key] || {}).rev || 0; wkSaved += (m[x.key] || {}).saved || 0; }
+  const week = h('section', { class: 'card st-week', 'aria-label': 'Чтение за 7 дней' },
+    h('div', { class: 'st-h' }, h('b', { text: '7 дней' }), h('span', { class: 'muted', text: wkMin + ' мин чтения' })),
+    h('div', { class: 'bars' }, list.map(x => h('div', { class: 'bwrap', title: x.min + ' мин' }, h('i', { style: `height:${x.min ? Math.max(4, x.min / max * 100) : 0}%` + (x.min >= goal ? ';background:var(--accent)' : '') }))),
+      h('i', { class: 'goal', style: `bottom:${(goal / max * 100).toFixed(1)}%` })),
+    h('div', { class: 'blabels' }, list.map(x => h('div', { class: x.today ? 'today' : '' }, h('span', { class: 'bdot' + (x.on ? ' on' : '') }), h('small', { text: x.wd })))));
+  // слова
+  const learned = words.filter(w => (w.box || 0) >= 3).length, learning = words.filter(w => (w.box || 0) > 0 && (w.box || 0) < 3).length, fresh = words.length - learned - learning;
+  const pct = n => words.length ? (n / words.length * 100).toFixed(1) + '%' : '0';
+  const tile = (n, label) => h('div', { class: 'card st-tile' }, h('b', { text: String(n) }), h('span', { text: label }));
+  const wcard = h('section', { class: 'card st-words', 'aria-label': 'Слова' },
+    h('div', { class: 'st-h' }, h('b', { text: 'Слова' }), h('span', { class: 'muted', text: words.length + ' в словаре' })),
+    h('div', { class: 'seg3', 'aria-hidden': 'true' }, h('i', { style: 'width:' + pct(learned) + ';background:var(--accent)' }), h('i', { style: 'width:' + pct(learning) + ';background:var(--saved)' }), h('i', { style: 'width:' + pct(fresh) + ';background:var(--line2)' })),
+    h('div', { class: 'leg' }, [[learned, 'выучено', 'var(--accent)'], [learning, 'учатся', 'var(--saved)'], [fresh, 'новые', 'var(--line2)']].map(([n, l, c]) => h('span', null, h('i', { style: 'background:' + c }), h('b', { text: String(n) }), ' ' + l))),
+    h('p', { class: 'muted', style: 'margin:0;font-size:13px', text: 'Выученным слово считается, когда вы угадали его три раза подряд с паузами в 1, 3 и 7 дней.' }));
+  box.replaceChildren(hero, h('div', { class: 'st-tiles' }, tile(wkSaved, 'новых слов за неделю'), tile(wkRev, 'карточек за неделю')), week, wcard);
+}
+function pickGoal() {
+  openModal([h('h3', { style: 'margin:0 0 6px;font-family:var(--serif);font-size:20px', text: 'Цель на день' }), h('p', { class: 'muted', style: 'margin:0 0 14px;font-size:14px', text: 'Сколько минут читать каждый день.' }),
+    h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Минут в день', style: 'grid-template-columns:repeat(5,1fr)' }, [5, 10, 15, 20, 30].map(n => h('button', { role: 'radio', 'aria-checked': String((S.goal || 10) === n), onclick: () => { S.goal = n; saveS(); closeModal(); renderProfile(); } }, n + ' мин')))]);
+}
 function renderProfile() {
+  renderStats();
   const k = getKey();
   const row = (label, val, fn) => h('li', null, h('button', { onclick: fn, style: 'flex:1;display:flex;align-items:center;gap:12px;min-height:44px;border:0;background:transparent;text-align:left;padding:0' }, h('span', { style: 'flex:1;font-size:15px', text: label }), h('span', { class: 'muted', style: 'font-size:14px', text: val }), ico('chev', 18, 'color:var(--muted)')));
   $('#profList').replaceChildren(
+    row('Цель на день', (S.goal || 10) + ' мин', pickGoal),
     row('Уровень английского', S.level || 'B1', () => { lvlReturn = 'Profile'; renderLevels(); show('Level'); }),
     row('Ключ перевода', k ? 'Gemini ••••' + k.slice(-4) : 'не задан', () => openKey('Profile')),
     row('Модель', S.model + (lastModel && lastModel !== S.model ? ' (сейчас: ' + lastModel + ')' : ''), () => { const m = prompt('Название модели Gemini', S.model); if (m && m.trim()) { S.model = m.trim(); saveS(); renderProfile(); } }),
@@ -589,6 +661,7 @@ function updProgress(loc) {
   if (curBook) { curBook.pct = pct; curBook.left = left; }
 }
 function onRelocated(loc) {
+  act();
   lastLoc = loc; markChapter(loc); updProgress(loc); updMarkBtn();
   if (curBook) { curBook.cfi = loc.start.cfi; curBook.chapter = curChapter; curBook.lastRead = Date.now(); clearTimeout(progT); progT = setTimeout(saveBooks, 600); }
 }
@@ -626,6 +699,7 @@ $('#chPrev').onclick = () => goChapter(-1); $('#chNext').onclick = () => goChapt
 let pt = null;
 function attachInput(contents) {
   const doc = contents.document, win = contents.window;
+  doc.addEventListener('pointerdown', act, true); doc.addEventListener('keydown', act, true);
   doc.addEventListener('pointerdown', e => { pt = { x: e.clientX, y: e.clientY, sx: e.screenX, sy: e.screenY, t: Date.now(), type: e.pointerType }; }, { passive: true });
   doc.addEventListener('pointerup', e => {
     if (!pt) return; const p = pt; pt = null;
@@ -975,8 +1049,8 @@ async function afterLogin() {
   const prev = LS.get('lr_uid', '');
   if (prev !== user.id) {
     if (prev) { // другой аккаунт на этом устройстве — начинаем с чистого листа
-      books = []; words = []; notes = []; marks = []; S = Object.assign({}, DEF); queue = {};
-      for (const k of ['lr_books', 'lr_words', 'lr_notes', 'lr_marks', 'lr_s', 'lr_queue', 'lr_skipkey']) localStorage.removeItem(k);
+      books = []; words = []; notes = []; marks = []; days = []; S = Object.assign({}, DEF); queue = {};
+      for (const k of ['lr_books', 'lr_words', 'lr_notes', 'lr_marks', 'lr_days', 'lr_s', 'lr_queue', 'lr_skipkey']) localStorage.removeItem(k);
     }
     snap = EMPTY_SNAP(); LS.set('lr_uid', user.id);
     diffAll(); // книги и слова из локального режима переезжают в аккаунт

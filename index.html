@@ -229,6 +229,45 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 .rv-hint b{font-size:15px} .rv-hint small{font-size:12px;color:var(--muted)}
 .rv-ok{width:64px;height:64px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center}
 
+/* ---------- профиль ---------- */
+#profStats{--saved:color-mix(in srgb,var(--accent) 45%,var(--paper))}
+.st-hero{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px 12px;padding:18px}
+.st-streak{display:flex;align-items:center;gap:12px;color:var(--muted)}
+.st-streak.on{color:var(--warn-dot)}
+.st-streak div{display:flex;flex-direction:column;color:var(--ink)}
+.st-streak b{font-family:var(--serif);font-size:38px;line-height:1;font-weight:600}
+.st-streak span{font-size:14px;color:var(--ink2)}
+.st-goal{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:transparent;padding:0;color:var(--ink)}
+.ringwrap{position:relative;width:64px;height:64px}
+.ringwrap svg{width:64px;height:64px}
+.ringwrap span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px}
+.st-goal small{font-size:12px;color:var(--muted)}
+.st-sub{grid-column:1/-1;margin:0;font-size:14px;color:var(--ink2)}
+.st-tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.st-tile{padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.st-tile b{font-family:var(--serif);font-size:28px;font-weight:600;line-height:1.1}
+.st-tile span{font-size:13px;color:var(--ink2)}
+.st-week,.st-words{padding:16px;display:flex;flex-direction:column;gap:12px}
+.st-h{display:flex;justify-content:space-between;align-items:baseline;font-size:15px}
+.st-h span{font-size:14px}
+.bars{position:relative;display:grid;grid-template-columns:repeat(7,1fr);gap:8px;height:96px}
+.bars .goal{position:absolute;left:-4px;right:-4px;height:0;border-top:1.5px dashed var(--line2);pointer-events:none}
+.bwrap{height:100%;display:flex;align-items:flex-end;background:var(--soft);border-radius:7px;overflow:hidden}
+.bwrap i{display:block;width:100%;background:var(--saved);border-radius:7px}
+.blabels{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:-4px}
+.blabels div{display:flex;flex-direction:column;align-items:center;gap:4px}
+.bdot{width:6px;height:6px;border-radius:50%;background:var(--line)}
+.bdot.on{background:var(--warn-dot)}
+.blabels small{font-size:12px;color:var(--muted)}
+.blabels .today small{color:var(--ink);font-weight:700}
+.seg3{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--line);gap:2px}
+.seg3 i{display:block;height:100%}
+.leg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:14px;color:var(--ink2)}
+.leg span{display:flex;align-items:center;gap:6px}
+.leg i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.leg b{color:var(--ink)}
+.st-sec{margin:8px 0 -4px;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+
 /* ---------- desktop: панели справа ---------- */
 @media (min-width:900px){
   #sheet{left:auto;top:0;width:400px;max-height:none!important;height:100dvh!important;border-radius:0;transform:translateX(105%);box-shadow:-10px 0 30px rgba(0,0,0,.08);border-left:1px solid var(--line)}
@@ -351,8 +390,10 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 <section id="sProfile" class="screen" aria-label="Профиль">
   <div class="scroll"><div class="wrap" style="gap:14px">
     <h1 class="title">Профиль</h1>
-    <div class="card" id="profNote" style="padding:14px 16px;font-size:14px;color:var(--ink2)"></div>
+    <div id="profStats" style="display:flex;flex-direction:column;gap:12px"></div>
+    <h2 class="st-sec">Настройки</h2>
     <ul class="wlist" id="profList"></ul>
+    <div class="card" id="profNote" style="padding:14px 16px;font-size:14px;color:var(--ink2)"></div>
   </div></div>
 </section>
 
