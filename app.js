@@ -537,11 +537,14 @@ function renderReview() {
   requestAnimationFrame(() => requestAnimationFrame(() => card.classList.remove('enter')));
   // жесты
   let x0 = null, dx = 0, moved = false;
-  const setDx = d => { dx = d; card.style.transform = `translateX(${d}px) rotate(${(d / 22).toFixed(1)}deg)`; const k = Math.min(1, Math.abs(d) / SWIPE); ok.style.opacity = d > 0 ? k : 0; no.style.opacity = d < 0 ? k : 0; ok.firstChild.style.transform = no.firstChild.style.transform = `scale(${(0.7 + 0.3 * k).toFixed(2)})`; };
+  let raf = 0;
+  const setDx = d => { dx = d; cancelAnimationFrame(raf); raf = requestAnimationFrame(() => paintDx(d)); };
+  const paintDx = d => { card.style.transform = `translateX(${d}px) rotate(${(d / 22).toFixed(1)}deg)`; const k = Math.min(1, Math.abs(d) / SWIPE); ok.style.opacity = d > 0 ? k : 0; no.style.opacity = d < 0 ? k : 0; ok.firstChild.style.transform = no.firstChild.style.transform = `scale(${(0.7 + 0.3 * k).toFixed(2)})`; };
   card.addEventListener('pointerdown', e => { if (e.target.closest('.rv-speak')) return; x0 = e.clientX; moved = false; card.style.transition = 'none'; try { card.setPointerCapture(e.pointerId); } catch (er) {} });
   card.addEventListener('pointermove', e => { if (x0 == null) return; const d = e.clientX - x0; if (Math.abs(d) > 6) moved = true; setDx(d); });
-  const up = () => { if (x0 == null) return; x0 = null; card.style.transition = ''; if (dx > SWIPE) commit(card, true); else if (dx < -SWIPE) commit(card, false); else { setDx(0); ok.style.opacity = no.style.opacity = 0; if (!moved) { rv.shown = !rv.shown; renderReview(); } } };
+  const up = () => { if (x0 == null) return; x0 = null; cancelAnimationFrame(raf); card.style.transition = ''; if (dx > SWIPE) commit(card, true); else if (dx < -SWIPE) commit(card, false); else { setDx(0); ok.style.opacity = no.style.opacity = 0; if (!moved) { rv.shown = !rv.shown; renderReview(); } } };
   card.addEventListener('pointerup', up); card.addEventListener('pointercancel', up);
+  card.addEventListener('touchmove', e => { if (x0 != null) e.preventDefault(); }, { passive: false }); // не отдаём свайп браузеру (жест «назад»)
   card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); rv.shown = !rv.shown; renderReview(); } });
 }
 let committing = false;
@@ -900,7 +903,12 @@ Return ONLY one JSON object (no markdown), keys in EXACTLY this order:
 const cacheKey = c => (S.level || 'B1') + '|' + c.sel.toLowerCase() + '||' + c.sentence.slice(0, 220);
 async function translate(c) {
   if (aborter) aborter.abort(); aborter = new AbortController(); const signal = aborter.signal;
-  if (useBubble()) openBubble(c); else openSheet(false);
+  if (useBubble()) openBubble(c);
+  else {
+    const low = !isDesk() && c.rect && (c.rect.top + c.rect.bottom) / 2 > window.innerHeight * 0.5;
+    if (!isSheetOpen() && sheet.classList.contains('top') !== !!low) { sheet.classList.add('notr'); sheet.classList.toggle('top', !!low); void sheet.offsetHeight; sheet.classList.remove('notr'); }
+    openSheet(false);
+  }
   const key = cacheKey(c);
   if (cache[key]) { paint(c, cache[key], true); return; }
   paint(c, {}, false);
@@ -941,7 +949,7 @@ function closeBubble(keepSel) {
 function paintBubble(c, r, done, err) {
   if (!isBubble() || curCtx !== c) return;
   const sv = savedWord(c);
-  const star = h('button', { class: 'star', 'aria-label': sv ? 'Убрать из словаря' : 'В словарь', 'aria-pressed': String(!!sv), disabled: !done && !sv, onclick: () => toggleSave(c, r) }, ico('star', 20));
+  const star = h('button', { class: 'star lbl', 'aria-label': sv ? 'Убрать из словаря' : 'Сохранить в словарь', 'aria-pressed': String(!!sv), disabled: !done && !sv, onclick: () => toggleSave(c, r) }, ico('star', 16), sv ? 'В словаре' : 'В словарь');
   const ex = Array.isArray(r.examples) ? r.examples.filter(x => x && x.en) : [];
   bubble.replaceChildren(
     h('div', { class: 'sh-head' }, h('h3', { lang: 'en', text: c.sel }), iconBtn('speak', 'Произнести', () => speak(c.sel), 'icobtn', 20), h('span', { class: 'pos', text: r.pos || '' }), star),
@@ -971,13 +979,14 @@ function closeSheet() {
 }
 let hintT; function showHint() { if (isDesk()) return; const el = $('#hint'); el.classList.add('on'); placeHint(); clearTimeout(hintT); hintT = setTimeout(hideHint, 4500); }
 function hideHint() { $('#hint').classList.remove('on'); }
-function placeHint() { requestAnimationFrame(() => { $('#hint').style.top = Math.max(60, window.innerHeight - sheet.offsetHeight - 52) + 'px'; }); }
+function placeHint() { requestAnimationFrame(() => { $('#hint').style.top = (sheet.classList.contains('top') ? sheet.offsetHeight + 14 : Math.max(60, window.innerHeight - sheet.offsetHeight - 52)) + 'px'; }); }
 // перетаскивание шторки
 (() => {
   let y0 = null, h0 = 0;
-  const start = e => { if (isDesk()) return; y0 = e.clientY; h0 = sheet.getBoundingClientRect().height; sheet.style.transition = 'none'; e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId); };
-  const move = e => { if (y0 == null) return; const d = e.clientY - y0; if (d > 0) sheet.style.transform = `translateY(${d}px)`; else { sheet.style.maxHeight = (h0 - d) + 'px'; sheet.style.height = (h0 - d) + 'px'; } };
-  const end = e => { if (y0 == null) return; const d = e.clientY - y0; y0 = null; sheet.style.transition = ''; sheet.style.transform = ''; sheet.style.maxHeight = ''; sheet.style.height = '';
+  let sg = 1;
+  const start = e => { if (isDesk()) return; sg = sheet.classList.contains('top') ? -1 : 1; y0 = e.clientY; h0 = sheet.getBoundingClientRect().height; sheet.style.transition = 'none'; e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId); };
+  const move = e => { if (y0 == null) return; const d = (e.clientY - y0) * sg; if (d > 0) sheet.style.transform = `translateY(${d * sg}px)`; else { sheet.style.maxHeight = (h0 - d) + 'px'; sheet.style.height = (h0 - d) + 'px'; } };
+  const end = e => { if (y0 == null) return; const d = (e.clientY - y0) * sg; y0 = null; sheet.style.transition = ''; sheet.style.transform = ''; sheet.style.maxHeight = ''; sheet.style.height = '';
     if (Math.abs(d) < 6) { if (e.target.closest('.grab')) openSheet(!sheet.classList.contains('full')); return; }
     if (d < -40) openSheet(true); else if (d > 60) { if (sheet.classList.contains('full')) openSheet(false); else closeSheet(); } else openSheet(sheet.classList.contains('full')); };
   const grab = $('#sheetGrab');
@@ -991,8 +1000,8 @@ function savedWord(c) { return words.find(w => w.bookId === (curBook && curBook.
 function paint(c, r, done) {
   const body = $('#sheetBody'); const top = body.scrollTop; body.innerHTML = '';
   const sv = savedWord(c);
-  const star = h('button', { class: 'star', 'aria-label': sv ? 'Убрать из словаря' : 'В словарь', 'aria-pressed': String(!!sv), disabled: !done && !sv, onclick: () => toggleSave(c, r) }, ico('star', 22));
-  body.append(h('div', { class: 'sh-head' }, h('h3', { lang: 'en', text: c.sel }), iconBtn('speak', 'Произнести', () => speak(c.sel)), h('span', { class: 'pos', text: r.pos || '' }), star));
+  const star = h('button', { class: 'star lbl', 'aria-label': sv ? 'Убрать из словаря' : 'Сохранить в словарь', 'aria-pressed': String(!!sv), disabled: !done && !sv, onclick: () => toggleSave(c, r) }, ico('star', 18), sv ? 'В словаре' : 'В словарь');
+  body.append(h('div', { class: 'sh-head' }, h('h3', { lang: 'en', class: c.sel.length > 18 ? 'long' : '', text: c.sel }), iconBtn('speak', 'Произнести', () => speak(c.sel)), h('span', { class: 'pos', text: r.pos || '' }), star));
   const meta = [r.transcription, r.base_form && r.base_form.toLowerCase() !== c.sel.toLowerCase() ? 'словарная форма: ' + r.base_form : ''].filter(Boolean).join(' · ');
   if (meta) body.append(h('div', { class: 'sh-meta full-only', text: meta }));
   body.append(r.translation ? h('div', { class: 'sh-tr', text: r.translation }) : h('div', { class: 'muted' }, h('span', { class: 'spin' }), '  Перевожу…'));
