@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 
-const VER = 26; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 27; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -274,7 +274,10 @@ const NET_HINT = 'Google не отвечает. Похоже, VPN пропуск
 const timings = LS.get('lr_timings', []); // замеры последних переводов: Профиль → Отчёт для разработчика
 const addTiming = (rec, more) => { timings.push(Object.assign(rec, more)); while (timings.length > 30) timings.shift(); LS.set('lr_timings', timings); };
 async function copyTimings() {
-  const txt = JSON.stringify({ site: location.host, ver: VER, timings, posLog });
+  // коротко, чтобы помещалось в сообщение: до первого слова / всего, модель, чем кончилось, шаги сервера
+  const short = s => String(s || '').replace(/;dur=/g, ':').replace(/;desc="(?:gemini-)?([^"]*)"/g, '($1)').replace(/, /g, ' ');
+  const txt = 'v' + VER + ' ' + location.host + '\n' + timings.slice(-12).map(x => (x.first || 0) + '/' + x.total + ' ' + String(x.model || '').replace('gemini-', '') + ' ' + (x.end || '?') + (/sentence_translation/.test(x.keys || '') ? '' : ' неполный') + ' | ' + short(x.server)).join('\n')
+    + '\n' + posLog.slice(-3).map(p => 'место ' + [p.saved, p.opened, p.after].map(v => v == null ? '-' : Math.round(v * 1000) / 10).join('>') + (p.fixed ? ' исправлено' : '') + (p.err ? ' ' + p.err : '')).join('\n');
   try { await navigator.clipboard.writeText(txt); toast('Отчёт скопирован, вставьте его в сообщение'); } catch (e) { prompt('Скопируйте отчёт', txt); }
 }
 async function gemini(prompt, outerSignal, onPartial, keyOverride, timeoutMs = 25000) {
@@ -918,7 +921,7 @@ function onTap(e, contents) {
   if ((isSheetOpen() || isBubble()) && curCtx && curCtx.doc === contents.document && curCtx.range && overlaps(curCtx.range, wr)) { phrase = null; closeSheet(); closeBubble(); return; } // второй тап по выделенному — закрыть
   toggleChrome(false);
   let range = wr, isPhrase = false;
-  if (phrase && phrase.doc === contents.document && Date.now() - phrase.t < 6000 && blockOf(wr.startContainer) === phrase.block && !sameRange(wr, phrase.range)) {
+  if (phrase && phrase.doc === contents.document && Date.now() - phrase.t < PHRASE_MS && blockOf(wr.startContainer) === phrase.block && !sameRange(wr, phrase.range)) {
     range = contents.document.createRange();
     if (wr.compareBoundaryPoints(Range.START_TO_START, phrase.range) < 0) { range.setStart(wr.startContainer, wr.startOffset); range.setEnd(phrase.range.endContainer, phrase.range.endOffset); }
     else { range.setStart(phrase.range.startContainer, phrase.range.startOffset); range.setEnd(wr.endContainer, wr.endOffset); }
@@ -953,6 +956,7 @@ function onSelectedRange(cfiRange, contents) {
 }
 
 /* --- контекст и запрос перевода --- */
+const PHRASE_MS = 3000; // сколько ждём второе слово фразы; позже касание — новое слово
 let phrase = null, selCfi = null, aborter = null, curCtx = null, paintRaf = 0;
 // место выделения в абзаце: именно то вхождение, которого коснулись, а не первое похожее
 function selIndex(range, blk, para, sel) {
@@ -1018,6 +1022,9 @@ async function translate(c) {
   const key = cacheKey(c);
   if (isFull(cache[key])) { paint(c, cache[key], true); return; }
   paint(c, {}, false);
+  // случайное касание: если карточку сразу закрыли или выбрали другое слово, запрос не уходит и лимит не тратится
+  await new Promise(r => setTimeout(r, 250));
+  if (signal.aborted) return;
   try {
     const res = await gemini(buildPrompt(c), signal, r => { if (signal.aborted) return; cancelAnimationFrame(paintRaf); paintRaf = requestAnimationFrame(() => { if (curCtx === c) paint(c, r, false); }); });
     if (isFull(res)) { cache[key] = res; const ks = Object.keys(cache); if (ks.length > 1500) ks.slice(0, 300).forEach(k => delete cache[k]); LS.set('lr_cache', cache); }
@@ -1085,7 +1092,7 @@ function closeSheet() {
   if (aborter) aborter.abort(); phrase = null;
   try { if (selCfi && rendition) rendition.annotations.remove(selCfi, 'highlight'); } catch (e) {} selCfi = null;
 }
-let hintT; function showHint() { if (isDesk()) return; const el = $('#hint'); el.classList.add('on'); placeHint(); clearTimeout(hintT); hintT = setTimeout(hideHint, 4500); }
+let hintT; function showHint() { if (isDesk()) return; const el = $('#hint'); el.classList.add('on'); placeHint(); clearTimeout(hintT); hintT = setTimeout(hideHint, PHRASE_MS); }
 function hideHint() { $('#hint').classList.remove('on'); }
 function placeHint() { requestAnimationFrame(() => { $('#hint').style.top = (sheet.classList.contains('top') ? sheet.offsetHeight + 14 : Math.max(60, window.innerHeight - sheet.offsetHeight - 52)) + 'px'; }); }
 // перетаскивание шторки
