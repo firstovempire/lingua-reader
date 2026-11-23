@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 
-const VER = 34; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 35; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -204,8 +204,9 @@ let lgRun = 0;
 async function lgDemo() {
   const run = ++lgRun, box = $('#lgDemo'), rep = $('.lg-rep'), days = $$('.lg-rep em');
   const q = s => box.querySelector(s), put3 = e => { q('.pre').textContent = e[0]; q('.hlt').textContent = e[1]; q('.post').textContent = e[2]; q('.lg-vs s').textContent = e[3]; q('.lg-vs strong').textContent = e[4]; };
-  box.className = 'lg-demo'; rep.classList.remove('anim'); days.forEach(d => d.classList.remove('now', 'past')); put3(LG[0]);
-  if (matchMedia('(prefers-reduced-motion:reduce)').matches) return;
+  put3(LG[0]); days.forEach(d => d.classList.remove('now', 'past'));
+  if (matchMedia('(prefers-reduced-motion:reduce)').matches) { box.className = 'lg-demo'; rep.classList.remove('anim'); return; }
+  box.className = 'lg-demo anim pre0'; rep.classList.add('anim'); // сразу пустое поле: оно же задано в разметке
   const alive = () => run === lgRun && current === 'Login', sleep = ms => new Promise(r => setTimeout(r, ms));
   // ждём и, если вкладка скрыта, стоим на месте. Проверяем сами: событие visibilitychange приходит не во всех случаях
   const wait = async ms => { await sleep(ms); while (alive() && document.hidden) await sleep(400); if (!alive()) throw 0; };
@@ -213,12 +214,9 @@ async function lgDemo() {
   const mouse = matchMedia('(hover:hover) and (pointer:fine)').matches;
   const day = i => { days.forEach((d, n) => { d.classList.toggle('past', n < i); d.classList.toggle('now', n === i); }); rep.style.setProperty('--p', Math.max(0, i) / (days.length - 1)); };
   try {
-    await wait(900);
-    // статичная картинка растворяется так же, как сменяются предложения
-    box.className = 'lg-demo anim hl lit str mean'; rep.classList.add('anim'); day(days.length - 1);
-    await wait(60);
+    day(-1); await wait(350);
     for (let k = 0; ; k++) {
-      await step('out', 400); day(-1); await wait(160);
+      if (k) { await step('out', 400); day(-1); await wait(160); }
       box.className = 'lg-demo anim pre0'; put3(LG[k % LG.length]);
       const w = q('mark').offsetWidth; // одно измерение на предложение
       box.style.setProperty('--y', mouse ? '10px' : '14px');
