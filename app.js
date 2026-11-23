@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 
-const VER = 32; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 33; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -193,6 +193,46 @@ const files = {
 const SCREENS = ['Login', 'Level', 'Key', 'Lib', 'Words', 'Review', 'Profile', 'Reader'];
 const TABBED = new Set(['Lib', 'Words', 'Review', 'Profile']);
 let current = '';
+/* живой пример на экране входа: три предложения по очереди, два круга, потом спокойная статичная картинка.
+   Не работает при «Уменьшении движения», в скрытой вкладке и на других экранах */
+const LG = [
+  ['It was ', 'raining cats and dogs', '.', 'дождь из кошек и собак', 'лил как из ведра'],
+  ['The test was ', 'a piece of cake', '.', 'кусок торта', 'проще простого'],
+  ['You’ll do great. ', 'Break a leg', '!', 'сломай ногу', 'ни пуха ни пера']
+];
+let lgRun = 0;
+async function lgDemo() {
+  const run = ++lgRun, box = $('#lgDemo'), rep = $('.lg-rep'), days = $$('.lg-rep em');
+  const q = s => box.querySelector(s), put3 = e => { q('.pre').textContent = e[0]; q('.hlt').textContent = e[1]; q('.post').textContent = e[2]; q('.lg-vs s').textContent = e[3]; q('.lg-vs strong').textContent = e[4]; };
+  const rest = () => { box.className = 'lg-demo'; rep.classList.remove('anim'); days.forEach(d => d.classList.remove('now', 'past')); put3(LG[0]); };
+  rest();
+  if (current !== 'Login' || document.hidden || matchMedia('(prefers-reduced-motion:reduce)').matches) return;
+  const alive = () => run === lgRun, wait = ms => new Promise(r => setTimeout(r, ms));
+  const step = async (cls, ms) => { if (!alive()) throw 0; box.classList.add(cls); await wait(ms); if (!alive()) throw 0; };
+  const mouse = matchMedia('(hover:hover) and (pointer:fine)').matches;
+  const day = i => { days.forEach((d, n) => { d.classList.toggle('past', n < i); d.classList.toggle('now', n === i); }); rep.style.setProperty('--p', Math.max(0, i) / (days.length - 1)); };
+  try {
+    await wait(1400); if (!alive()) return;
+    for (let k = 0; k < LG.length * 2; k++) {
+      box.className = 'lg-demo anim'; put3(LG[k % LG.length]); rep.classList.add('anim'); day(-1);
+      const w = q('mark').offsetWidth; // одно измерение на предложение
+      box.style.setProperty('--y', mouse ? '10px' : '14px');
+      box.style.setProperty('--x0', (mouse ? 40 : w * 0.5 + 24) + 'px');
+      box.style.setProperty('--x1', (mouse ? -6 : w * 0.5 - 12) + 'px');
+      box.style.setProperty('--x2', (mouse ? w - 6 : w * 0.5 - 12) + 'px');
+      box.style.setProperty('--drag', mouse ? '.85s' : '.4s');
+      await wait(60); await step('cur', 820);
+      if (!mouse) { await step('tap', 150); box.classList.remove('tap'); }
+      await step('hl', mouse ? 1000 : 520);
+      await step('lit', 800); await step('str', 560); await step('mean', 520);
+      for (let i = 0; i < days.length; i++) { if (!alive()) return; day(i); await wait(i < days.length - 1 ? 420 : 1300); }
+      if (!alive()) return;
+      if (k < LG.length * 2 - 1) await step('out', 380);
+    }
+    await step('out', 380); rest();
+  } catch (e) { if (e !== 0) console.warn(e); }
+}
+document.addEventListener('visibilitychange', () => { if (current === 'Login') lgDemo(); });
 function show(name) {
   if (name !== 'Reader') { const nc = document.getElementById('nextCh'); if (nc) nc.classList.remove('on'); }
   current = name;
@@ -201,6 +241,7 @@ function show(name) {
   document.body.classList.toggle('reading', name === 'Reader');
   $$('#tabbar button').forEach(b => { if (b.dataset.go === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   if (name !== 'Reader') { closeSheet(); closeModal(); document.body.classList.remove('chrome'); }
+  if (name === 'Login') lgDemo(); else if (lgRun) lgRun++; // уходим со входа — пример останавливается
   if (name === 'Lib') renderLib();
   if (name === 'Words') renderWords();
   if (name === 'Profile') renderProfile();
