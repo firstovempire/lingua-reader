@@ -22,6 +22,8 @@ function h(tag, props, ...kids) {
   for (const k of kids.flat()) if (k != null && k !== false) e.append(k.nodeType ? k : document.createTextNode(String(k)));
   return e;
 }
+// как replaceChildren, но без пустых: сам он печатает null словом «null»
+const put = (el, ...kids) => el.replaceChildren(...kids.filter(k => k != null && k !== false && k !== ''));
 const P = {
   back: '<path d="m15 18-6-6 6-6"/>', chev: '<path d="m9 6 6 6-6 6"/>', up: '<path d="m6 15 6-6 6 6"/>',
   speak: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>',
@@ -48,7 +50,7 @@ function speak(text) { try { speechSynthesis.cancel(); const u = new SpeechSynth
 const CFG = window.LR_CONFIG || {};
 const CLOUD = !!(CFG.SUPABASE_URL && CFG.SUPABASE_KEY && window.supabase);
 const sb = CLOUD ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' } }) : null;
-let user = null, keyLast4 = '', lastRegion = '', lastModel = '', lastTiming = '', loggedFor = '';
+let user = null, keyLast4 = '', lastRegion = '', lastModel = '', lastTiming = '', lastEnd = '', loggedFor = '';
 const REGION_NAMES = { 'eu-west-3': 'Париж', 'eu-central-1': 'Франкфурт', 'eu-west-1': 'Ирландия', 'eu-west-2': 'Лондон' };
 
 /* ================= данные ================= */
@@ -270,9 +272,9 @@ async function gemini(prompt, outerSignal, onPartial, keyOverride, timeoutMs = 2
   const seen = r => { if (!rec.first && r.translation) rec.first = since(); onPartial && onPartial(r); };
   try {
     const res = await geminiInner(prompt, signal, seen, key, arm);
-    timings.push(Object.assign(rec, { total: since(), model: CLOUD ? lastModel : S.model, server: lastTiming })); if (timings.length > 30) timings.shift();
+    timings.push(Object.assign(rec, { total: since(), model: CLOUD ? lastModel : S.model, server: lastTiming, end: lastEnd, keys: Object.keys(res || {}).join(',') })); if (timings.length > 30) timings.shift();
     return res;
-  } catch (e) { throw fail(e); } finally { clearTimeout(timer); }
+  } catch (e) { if (e.name !== 'AbortError' || timedOut) { timings.push(Object.assign(rec, { total: since(), model: S.model, server: lastTiming, end: timedOut ? 'timeout' : 'fail' })); if (timings.length > 30) timings.shift(); } throw fail(e); } finally { clearTimeout(timer); }
 }
 async function geminiInner(prompt, signal, onPartial, key, arm) {
   let r;
@@ -300,14 +302,14 @@ async function geminiInner(prompt, signal, onPartial, key, arm) {
   return readStream(r, onPartial, arm);
 }
 async function readStream(r, onPartial, arm) {
-  const reader = r.body.getReader(), dec = new TextDecoder(); let buf = '', acc = '';
+  const reader = r.body.getReader(), dec = new TextDecoder(); let buf = '', acc = '', streamErr = null; lastEnd = '';
   for (;;) {
     const { value, done } = await reader.read(); if (done) break; arm();
     buf += dec.decode(value, { stream: true });
     let k; while ((k = buf.indexOf('\n')) >= 0) {
       const line = buf.slice(0, k).trim(); buf = buf.slice(k + 1);
       if (!line.startsWith('data:')) continue;
-      try { const j = JSON.parse(line.slice(5)); const parts = (((j.candidates || [])[0] || {}).content || {}).parts || []; acc += parts.map(p => p.text || '').join(''); } catch (e) {}
+      try { const j = JSON.parse(line.slice(5)); const cand = (j.candidates || [])[0] || {}; if (cand.finishReason) lastEnd = cand.finishReason; if (j.error) { streamErr = j.error; lastEnd = 'error ' + (j.error.code || ''); } const parts = (cand.content || {}).parts || []; acc += parts.map(p => p.text || '').join(''); } catch (e) {}
     }
     onPartial && onPartial(partialParse(acc.replace(/^\s*```json\s*/, '')));
   }
@@ -315,8 +317,10 @@ async function readStream(r, onPartial, arm) {
   try { return JSON.parse(txt); } catch (e) {}
   const a = txt.indexOf('{'), b = txt.lastIndexOf('}'); if (a >= 0 && b > a) { try { return JSON.parse(txt.slice(a, b + 1)); } catch (e) {} }
   const p = partialParse(txt); if (p.translation) return p;
-  throw new Error('Модель ответила неожиданно. Коснитесь слова ещё раз.');
+  throw new Error(streamErr ? 'Модель Google сейчас перегружена. Коснитесь слова ещё раз.' : 'Модель ответила неожиданно. Коснитесь слова ещё раз.');
 }
+// ответ дошёл до конца: последний ключ промпта на месте (обрывки не кэшируем)
+const isFull = r => !!r && !!r.translation && r.sentence_translation != null;
 
 /* ================= библиотека ================= */
 async function readMeta(buf, fallback) {
@@ -414,7 +418,7 @@ function renderCatalog() {
         inLib ? h('button', { class: 'btn', style: 'min-height:38px;font-size:14px;align-self:flex-start', onclick: () => { const b = books.find(b => b.cat === x.id); closeModal(); if (b) openBook(b); } }, ico('check', 18), 'Читать')
           : h('button', { class: 'btn dark', style: 'min-height:38px;font-size:14px;align-self:flex-start', onclick: e => addFromCatalog(x, e.currentTarget) }, 'Добавить в библиотеку')));
   });
-  $('#modalBody').replaceChildren(
+  put($('#modalBody'),
     h('h3', { style: 'margin:0;font-family:var(--serif);font-size:22px', text: 'Бесплатная классика' }),
     h('p', { class: 'muted', style: 'margin:-8px 0 0;font-size:14px', text: 'Книги из общественного достояния в изданиях Standard Ebooks. Добавляются одним нажатием и не занимают место в вашем облаке.' }),
     h('div', { class: 'chips cat-chips' }, chip('all', 'Все · ' + catalog.length), LEVELS.map(([c, n]) => chip(c, c + ' · ' + n.toLowerCase()))),
@@ -632,7 +636,7 @@ function renderProfile() {
   renderStats();
   const k = getKey();
   const row = (label, val, fn) => h('li', null, h('button', { onclick: fn, style: 'flex:1;display:flex;align-items:center;gap:12px;min-height:44px;border:0;background:transparent;text-align:left;padding:0' }, h('span', { style: 'flex:1;font-size:15px', text: label }), h('span', { class: 'muted', style: 'font-size:14px', text: val }), ico('chev', 18, 'color:var(--muted)')));
-  $('#profList').replaceChildren(
+  put($('#profList'),
     row('Цель на день', (S.goal || 10) + ' мин', pickGoal),
     row('Уровень английского', S.level || 'B1', () => { lvlReturn = 'Profile'; renderLevels(); show('Level'); }),
     row('Ключ перевода', k ? 'Gemini ••••' + k.slice(-4) : 'не задан', () => openKey('Profile')),
@@ -950,11 +954,11 @@ async function translate(c) {
     openSheet(false);
   }
   const key = cacheKey(c);
-  if (cache[key]) { paint(c, cache[key], true); return; }
+  if (isFull(cache[key])) { paint(c, cache[key], true); return; }
   paint(c, {}, false);
   try {
     const res = await gemini(buildPrompt(c), signal, r => { if (signal.aborted) return; cancelAnimationFrame(paintRaf); paintRaf = requestAnimationFrame(() => { if (curCtx === c) paint(c, r, false); }); });
-    cache[key] = res; const ks = Object.keys(cache); if (ks.length > 1500) ks.slice(0, 300).forEach(k => delete cache[k]); LS.set('lr_cache', cache);
+    if (isFull(res)) { cache[key] = res; const ks = Object.keys(cache); if (ks.length > 1500) ks.slice(0, 300).forEach(k => delete cache[k]); LS.set('lr_cache', cache); }
     if (!signal.aborted && curCtx === c) { cancelAnimationFrame(paintRaf); paint(c, res, true); }
   } catch (e) {
     if (e.name === 'AbortError') return;
@@ -986,15 +990,17 @@ function closeBubble(keepSel) {
   bubble.classList.remove('on'); bubble.setAttribute('aria-hidden', 'true');
   if (!keepSel && !isSheetOpen()) { if (aborter) aborter.abort(); phrase = null; try { if (selCfi && rendition) rendition.annotations.remove(selCfi, 'highlight'); } catch (e) {} selCfi = null; }
 }
+const moreBtn = c => h('button', { class: 'btn', onclick: () => translate(c) }, 'Загрузить подробности'); // ответ оборвался
 function paintBubble(c, r, done, err) {
   if (!isBubble() || curCtx !== c) return;
   const sv = savedWord(c);
   const star = h('button', { class: 'star lbl', 'aria-label': sv ? 'Убрать из словаря' : 'Сохранить в словарь', 'aria-pressed': String(!!sv), disabled: !done && !sv, onclick: () => toggleSave(c, r) }, ico('star', 16), sv ? 'В словаре' : 'В словарь');
   const ex = Array.isArray(r.examples) ? r.examples.filter(x => x && x.en) : [];
-  bubble.replaceChildren(
+  put(bubble,
     h('div', { class: 'sh-head' }, h('h3', { lang: 'en', text: c.sel }), iconBtn('speak', 'Произнести', () => speak(c.sel), 'icobtn', 20), h('span', { class: 'pos', text: r.pos || '' }), star),
     err ? h('div', { class: 'err', text: err.message }) : r.translation ? h('div', { class: 'sh-tr', text: r.translation }) : h('div', { class: 'muted' }, h('span', { class: 'spin' }), '  Перевожу…'),
     ex[0] ? h('div', { class: 'sh-ex' }, h('div', { class: 'en', lang: 'en', text: ex[0].en }), h('div', { class: 'ru', text: ex[0].ru || '' })) : null,
+    done && !err && !isFull(r) ? moreBtn(c) : null,
     h('div', { class: 'bb-acts' },
       err ? (err.needKey ? h('button', { class: 'btn primary', onclick: () => openKey('Reader') }, 'Добавить ключ') : h('button', { class: 'btn', onclick: () => translate(c) }, 'Повторить')) : null,
       h('button', { class: 'btn', 'aria-label': 'Цитата', title: 'Цитата', onclick: () => addQuote(c) }, ico('quote', 18)),
@@ -1047,6 +1053,7 @@ function paint(c, r, done) {
   body.append(r.translation ? h('div', { class: 'sh-tr', text: r.translation }) : h('div', { class: 'muted' }, h('span', { class: 'spin' }), '  Перевожу…'));
   const ex = Array.isArray(r.examples) ? r.examples.filter(x => x && x.en) : [];
   if (ex[0]) body.append(h('div', { class: 'sh-ex peek-only' }, h('div', { class: 'en', lang: 'en', text: ex[0].en }), h('div', { class: 'ru', text: ex[0].ru || '' })));
+  if (done && !isFull(r)) body.append(moreBtn(c));
   if (r.explanation) body.append(h('div', { class: 'sh-sec full-only' }, h('h4', null, 'Почему так'), h('p', { text: r.explanation })));
   const bookP = h('p', { class: 'book', lang: 'en' }); const i = c.sentence.toLowerCase().indexOf(c.sel.toLowerCase());
   if (i >= 0) bookP.append(c.sentence.slice(0, i), h('mark', { text: c.sentence.slice(i, i + c.sel.length) }), c.sentence.slice(i + c.sel.length)); else bookP.textContent = c.sentence;

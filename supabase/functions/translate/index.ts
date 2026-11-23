@@ -25,7 +25,8 @@ const modelCache = new Map<string, { at: number; list: string[] }>();
 // какой вариант настроек (номер в variantOrder) подошёл каждой модели (чтобы не перебирать каждый раз)
 const goodVariant = new Map<string, number>();
 // модели, у которых кончился лимит: не дёргаем, пока Google не начнёт принимать их снова
-const exhausted = new Map<string, { until: number; daily: boolean }>();
+type Why = "day" | "minute" | "busy";
+const exhausted = new Map<string, { until: number; why: Why }>();
 const outOf = (key: string, m: string) => { const e = exhausted.get(key.slice(-8) + "|" + m); return e && e.until > Date.now() ? e : null; };
 // дневные лимиты Google сбрасываются в полночь по тихоокеанскому времени
 function msToPacificMidnight(): number {
@@ -38,8 +39,10 @@ function markOut(key: string, m: string, text: string) {
   const daily = /PerDay/i.test(text);
   const sec = Number((text.match(/"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/) ?? [])[1] ?? 60);
   const ms = daily ? msToPacificMidnight() + 60_000 : Math.min(Math.max(sec, 5), 300) * 1000;
-  exhausted.set(key.slice(-8) + "|" + m, { until: Date.now() + ms, daily });
+  exhausted.set(key.slice(-8) + "|" + m, { until: Date.now() + ms, why: daily ? "day" : "minute" });
 }
+// модель перегружена у Google или молчит: полминуты её не ждём
+const markBusy = (key: string, m: string) => exhausted.set(key.slice(-8) + "|" + m, { until: Date.now() + 30_000, why: "busy" });
 async function fallbackModels(key: string): Promise<string[]> {
   const hit = modelCache.get(key);
   if (hit && Date.now() - hit.at < 6 * 3600_000) return hit.list;
@@ -127,9 +130,16 @@ Deno.serve(async (req) => {
     : Number((m.match(/^gemini-(\d+)/) ?? [])[1] ?? 0) >= 3 ? [1, 2, 0, 3, 4, 5]
     : [0, 1, 2, 3, 4, 5];
   const body = (v: number) => JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: VARIANTS[v] });
-  const call = (m: string, v: number) => fetch(urlFor(m), {
-    method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": sec.api_key }, body: body(v),
-  });
+  // ждём начала ответа: основную модель 7 с, запасные 10 с; молчание считаем перегрузкой (504)
+  const call = async (m: string, v: number) => {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), m === model ? 7000 : 10000);
+    try {
+      return await fetch(urlFor(m), {
+        method: "POST", signal: ctl.signal, headers: { "Content-Type": "application/json", "x-goog-api-key": sec.api_key }, body: body(v),
+      });
+    } catch { return new Response("", { status: 504 }); } finally { clearTimeout(timer); }
+  };
   const tryModel = async (m: string) => {
     const vs = variantOrder(m);
     const send = (i: number) => timed("gemini", call(m, vs[i]), (x) => m + " v" + vs[i] + " " + x.status);
@@ -145,13 +155,15 @@ Deno.serve(async (req) => {
   };
 
   const key = sec.api_key;
-  let used = model, tried = 0, saw429 = false, sawDaily = false;
-  const skip = (m: string) => { const o = outOf(key, m); if (o) { saw429 = true; if (o.daily) sawDaily = true; } return !!o; };
-  // один заход на модель; null — лимит или нет такой модели, пробуем следующую
+  let used = model, tried = 0;
+  const saw = new Set<Why>();
+  const skip = (m: string) => { const o = outOf(key, m); if (o) saw.add(o.why); return !!o; };
+  // один заход на модель; null — лимит, перегрузка или нет такой модели, пробуем следующую
   const attempt = async (m: string): Promise<Response | null> => {
     tried++;
     const res = await tryModel(m);
     if (res.status === 429) { markOut(key, m, await res.text().catch(() => "")); skip(m); return null; }
+    if (res.status >= 500) { await res.body?.cancel(); markBusy(key, m); skip(m); return null; }
     if (res.status === 404) { await res.body?.cancel(); return null; }
     used = m; return res;
   };
@@ -160,15 +172,16 @@ Deno.serve(async (req) => {
   if (!r) {
     for (const m of await timed("models", fallbackModels(key))) {
       if (m === model || skip(m)) continue;
-      if (tried >= 6) break;
+      if (tried >= 6 || performance.now() - t00 > 14_000) break; // сайт ждёт ответа не дольше 25 с
       r = await attempt(m);
       if (r) break;
     }
   }
   if (!r && tried === 0) r = await attempt(model); // все отмечены исчерпанными — проверяем основную ещё раз
   if (!r) {
-    if (!saw429) return fail(404, "Модель «" + model + "» не найдена. Смените модель в профиле.", "model");
-    return sawDaily
+    if (!saw.size) return fail(404, "Модель «" + model + "» не найдена. Смените модель в профиле.", "model");
+    if (saw.has("busy")) return fail(503, "Модели Google сейчас перегружены. Коснитесь слова ещё раз через полминуты.", "busy");
+    return saw.has("day")
       ? fail(429, "Бесплатный лимит Google на сегодня исчерпан для всех доступных моделей. Попробуйте позже или завтра.", "quota")
       : fail(429, "Слишком много переводов подряд. Подождите минуту и коснитесь слова ещё раз.", "quota");
   }
