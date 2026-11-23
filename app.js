@@ -48,7 +48,7 @@ function speak(text) { try { speechSynthesis.cancel(); const u = new SpeechSynth
 const CFG = window.LR_CONFIG || {};
 const CLOUD = !!(CFG.SUPABASE_URL && CFG.SUPABASE_KEY && window.supabase);
 const sb = CLOUD ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' } }) : null;
-let user = null, keyLast4 = '', lastRegion = '', lastModel = '', loggedFor = '';
+let user = null, keyLast4 = '', lastRegion = '', lastModel = '', lastTiming = '', loggedFor = '';
 const REGION_NAMES = { 'eu-west-3': 'Париж', 'eu-central-1': 'Франкфурт', 'eu-west-1': 'Ирландия', 'eu-west-2': 'Лондон' };
 
 /* ================= данные ================= */
@@ -257,6 +257,7 @@ function apiError(status, data) {
   return m;
 }
 const NET_HINT = 'Google не отвечает. Похоже, VPN пропускает сайт Gemini, но не адрес API generativelanguage.googleapis.com. Включите в VPN весь трафик (глобальный режим) или добавьте домен googleapis.com и повторите.';
+const timings = []; // замеры последних переводов, в консоли: __lr.timings
 async function gemini(prompt, outerSignal, onPartial, keyOverride, timeoutMs = 25000) {
   const key = keyOverride || getKey();
   const ctl = new AbortController(); let timedOut = false, timer = null;
@@ -265,7 +266,13 @@ async function gemini(prompt, outerSignal, onPartial, keyOverride, timeoutMs = 2
   const signal = ctl.signal;
   const fail = e => { clearTimeout(timer); if (timedOut) return new Error(CLOUD ? 'Сервер перевода не ответил вовремя. Коснитесь слова ещё раз.' : NET_HINT); return e; };
   arm();
-  try { return await geminiInner(prompt, signal, onPartial, key, arm); } catch (e) { throw fail(e); } finally { clearTimeout(timer); }
+  const t0 = performance.now(), since = () => Math.round(performance.now() - t0), rec = { first: 0 }; lastTiming = '';
+  const seen = r => { if (!rec.first && r.translation) rec.first = since(); onPartial && onPartial(r); };
+  try {
+    const res = await geminiInner(prompt, signal, seen, key, arm);
+    timings.push(Object.assign(rec, { total: since(), model: CLOUD ? lastModel : S.model, server: lastTiming })); if (timings.length > 30) timings.shift();
+    return res;
+  } catch (e) { throw fail(e); } finally { clearTimeout(timer); }
 }
 async function geminiInner(prompt, signal, onPartial, key, arm) {
   let r;
@@ -276,15 +283,17 @@ async function geminiInner(prompt, signal, onPartial, key, arm) {
     try { r = await fetch(fnUrl, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token, 'apikey': CFG.SUPABASE_KEY }, body: JSON.stringify({ prompt, model: S.model }) }); }
     catch (e) { if (e.name === 'AbortError') throw e; throw new Error('Нет связи с сервером перевода. Проверьте интернет.'); }
     arm();
-    lastRegion = r.headers.get('x-lr-region') || lastRegion; lastModel = r.headers.get('x-lr-model') || lastModel;
+    lastRegion = r.headers.get('x-lr-region') || lastRegion; lastModel = r.headers.get('x-lr-model') || lastModel; lastTiming = r.headers.get('server-timing') || '';
     if (!r.ok) { const d = await r.json().catch(() => ({})); const err = new Error(d.error && d.error.code ? d.error.message : apiError(r.status, d)); if (d.error && d.error.code === 'no_key') err.needKey = true; throw err; }
     return readStream(r, onPartial, arm);
   }
   if (!key) { const e = new Error('Нужен ключ Gemini: Профиль → Ключ перевода.'); e.needKey = true; throw e; }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(S.model)}:streamGenerateContent?alt=sse`;
-  const body = t => JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: Object.assign({ responseMimeType: 'application/json', temperature: 0.2 }, t ? { thinkingConfig: { thinkingBudget: 0 } } : {}) });
+  // с Gemini 3 раздумья задаются уровнем, раньше — бюджетом; при ошибке 400 пробуем следующий вариант
+  const think = +(/^gemini-(\d+)/.exec(S.model) || [])[1] >= 3 ? [{ thinkingLevel: 'minimal' }, { thinkingLevel: 'low' }, { thinkingBudget: 0 }, null] : [{ thinkingBudget: 0 }, null];
+  const body = t => JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: Object.assign({ responseMimeType: 'application/json', temperature: 0.2 }, t ? { thinkingConfig: t } : {}) });
   const post = t => fetch(url, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: body(t) });
-  try { r = await post(true); if (r.status === 400) { const t = await r.clone().text(); if (!/api key/i.test(t)) r = await post(false); } }
+  try { for (const t of think) { r = await post(t); if (r.status !== 400 || /api key/i.test(await r.clone().text())) break; } }
   catch (e) { if (e.name === 'AbortError') throw e; throw new Error('Нет связи с Google (' + (e.message || 'network') + '). ' + NET_HINT); }
   arm();
   if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(apiError(r.status, d)); }
@@ -879,11 +888,20 @@ function onSelectedRange(cfiRange, contents) {
 
 /* --- контекст и запрос перевода --- */
 let phrase = null, selCfi = null, aborter = null, curCtx = null, paintRaf = 0;
+// место выделения в абзаце: именно то вхождение, которого коснулись, а не первое похожее
+function selIndex(range, blk, para, sel) {
+  try {
+    const pre = range.startContainer.ownerDocument.createRange(); pre.selectNodeContents(blk); pre.setEnd(range.startContainer, range.startOffset);
+    const at = pre.toString().replace(/\s+/g, ' ').trimStart().length;
+    for (const i of [at, at + 1]) if (para.startsWith(sel, i)) return i;
+  } catch (e) {}
+  const i = para.indexOf(sel); return i >= 0 ? i : Math.max(0, para.toLowerCase().indexOf(sel.toLowerCase()));
+}
 function handleRange(range, contents, kind, cfiKnown) {
   const sel = norm(range.toString()); if (!sel || sel.length > 400) return;
   const blk = blockOf(range.startContainer);
   const para = norm((blk && blk.textContent) || sel);
-  let idx = para.indexOf(sel); if (idx < 0) idx = Math.max(0, para.toLowerCase().indexOf(sel.toLowerCase()));
+  const idx = selIndex(range, blk, para, sel);
   let s = idx, e = idx + sel.length;
   while (s > 0 && !/[.!?…]["”’)]?\s$/.test(para.slice(Math.max(0, s - 3), s))) s--;
   while (e < para.length && !/[.!?…]/.test(para[e - 1] || '')) e++;
@@ -1262,5 +1280,5 @@ addEventListener('online', () => flush());
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
 boot();
 $('#keySkip').addEventListener('click', () => LS.set('lr_skipkey', true));
-window.__lr = { get rendition() { return rendition; }, get book() { return book; }, S };
+window.__lr = { get rendition() { return rendition; }, get book() { return book; }, S, timings };
 })();
