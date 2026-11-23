@@ -326,34 +326,65 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 @keyframes bbIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
 /* ---------- экран входа ---------- */
-.wrap.lg{padding:calc(var(--safe-t) + 18px) 8px 0;gap:22px;max-width:460px}
+.wrap.lg{padding:calc(var(--safe-t) + 8px) 8px 0;gap:18px;max-width:460px}
 .lg-brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;letter-spacing:.01em}
 .lg-logo{width:34px;height:34px;border-radius:10px;background:#2F6F5E;display:flex;align-items:center;justify-content:center}
 .lg-logo svg{width:22px;height:22px;fill:none;stroke:#FBF8F1;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
-.lg-h{margin:6px 0 0;text-wrap:balance;font-family:var(--serif);font-size:29px;line-height:1.18;font-weight:600;letter-spacing:-.01em}
-.lg-demo{position:relative;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:20px 18px 0;overflow:hidden;box-shadow:0 10px 30px rgba(60,40,10,.07)}
-.lg-demo p{margin:0 0 18px;font-family:var(--serif);font-size:19px;line-height:1.6;color:var(--ink)}
-.lg-demo mark{background:var(--hl);color:inherit;border-radius:4px;padding:1px 2px}
-.lg-demo mark{position:relative}
-.lg-tap{position:absolute;left:50%;top:50%;margin:-15px 0 0 -15px;width:30px;height:30px;border-radius:50%;background:rgba(47,111,94,.18);border:2px solid rgba(47,111,94,.45);animation:lgTap 2.4s ease-out infinite}
-@keyframes lgTap{0%{transform:scale(.6);opacity:0}15%{opacity:1}60%{transform:scale(1.25);opacity:0}100%{opacity:0}}
-@media (prefers-reduced-motion:reduce){.lg-tap{animation:none;opacity:.8}}
-.lg-sheet{margin:0 -18px;padding:14px 18px 18px;border-top:1px solid var(--line);background:var(--paper);border-radius:18px 18px 0 0;box-shadow:0 -6px 18px rgba(0,0,0,.05)}
-.lg-row{display:flex;align-items:center;gap:8px}
-.lg-row b{font-family:var(--serif);font-size:20px}
-.lg-row i{font-style:normal;font-size:12px;color:var(--muted);flex:1}
-.lg-star{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:5px 9px;border-radius:9px;border:1px solid var(--line2);color:var(--ink2)}
-.lg-star svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
-.lg-tr{margin-top:4px;font-size:22px;font-weight:700;color:var(--accent)}
-.lg-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.lg-steps li{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px}
-.lg-steps span{width:46px;height:46px;border-radius:14px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;margin-bottom:4px}
-.lg-steps svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.lg-steps b{font-size:14px}
-.lg-steps small{font-size:12px;line-height:1.3;color:var(--muted)}
-.lg-cta{margin-top:auto;display:flex;flex-direction:column;gap:12px}
-.lg-foot{margin:0;text-align:center;font-size:12px;line-height:1.5;color:var(--muted)}
-@media (max-height:700px){.wrap.lg{gap:14px}.lg-h{font-size:24px}.lg-demo{padding-top:14px}.lg-demo p{font-size:17px;margin-bottom:12px}.lg-steps small{display:none}}
+.lg-top{display:flex;flex-direction:column;gap:8px}
+.lg-h{margin:0;text-wrap:balance;font-family:var(--serif);font-size:28px;line-height:1.16;font-weight:600;letter-spacing:-.01em}
+.lg-sub{margin:0;font-size:15px;line-height:1.45;color:var(--ink2);text-wrap:pretty}
+.lg-path{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.lg-path li{position:relative;display:flex;gap:14px;padding-bottom:16px}
+.lg-path li:last-child{padding-bottom:0}
+.lg-path li:not(:last-child)::before{content:"";position:absolute;left:14px;top:34px;bottom:4px;border-left:2px dotted var(--line2)}
+.lg-n{flex:none;width:30px;height:30px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font:600 16px/30px var(--serif);text-align:center}
+.lg-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.lg-b>b{font-size:16px;line-height:30px}
+.lg-books{display:flex;gap:8px}
+.lg-books img,.lg-epub{flex:1 1 0;min-width:0;max-width:62px;height:auto;aspect-ratio:2/3;border-radius:6px;object-fit:cover;display:block}
+.lg-books img{box-shadow:0 3px 8px rgba(60,40,10,.16)}
+.lg-epub{border:1.5px dashed var(--line2);color:var(--muted);font-size:11px;line-height:1.25;font-weight:600;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.lg-path svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.lg-epub svg{width:16px;height:16px}
+.lg-demo{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 8px 24px rgba(60,40,10,.07)}
+.lg-demo p{margin:0;padding:12px 14px 18px;font-family:var(--serif);font-size:18px;line-height:1.5;color:var(--ink)}
+.lg-demo mark{position:relative;background:var(--hl);color:inherit;border-radius:4px;padding:1px 2px}
+.lg-hand{position:absolute;right:14px;top:62%;width:30px;height:30px;color:var(--accent)}
+.lg-hand svg{width:30px;height:30px;display:block}
+.lg-hand path{fill:var(--card)}
+.lg-vs{display:flex;align-items:baseline;gap:8px;padding:8px 14px;border-top:1px solid var(--line);background:var(--paper)}
+.lg-vs span{flex:none;width:68px;font-size:12.5px;color:var(--muted)}
+.lg-vs s{font-size:14px;color:var(--muted);text-decoration-color:var(--warn-dot);text-decoration-thickness:1.5px}
+.lg-vs.yes{background:var(--accent-soft)}
+.lg-vs strong{font-size:18px;line-height:1.25;color:var(--accent)}
+.lg-rep{position:relative;display:grid;grid-template-columns:repeat(5,1fr)}
+.lg-rep::before{content:"";position:absolute;left:10%;right:10%;top:17px;border-top:2px solid var(--line2)}
+.lg-rep em{position:relative;font-style:normal;font-size:12px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:4px}
+.lg-rep u{width:36px;height:36px;border-radius:50%;border:2px solid var(--line2);background:var(--card);color:var(--ink);text-decoration:none;font:600 16px/1 var(--serif);display:flex;align-items:center;justify-content:center}
+.lg-rep .ok{color:var(--accent);font-weight:600}
+.lg-rep .ok u{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.lg-cta{position:sticky;bottom:calc(-1 * var(--safe-b) - 28px);margin:auto -8px 0;padding:10px 8px calc(var(--safe-b) + 14px);background:var(--bg);display:flex;flex-direction:column;gap:8px}
+.lg-cta #loginMsg:empty{display:none}
+.lg-foot{margin:0;text-align:center;font-size:13px;line-height:1.5;color:var(--muted)}
+@media (max-height:760px) and (max-width:899px){.wrap.lg{gap:14px;padding-top:0}.lg-h{font-size:24px}.lg-path li{padding-bottom:14px}.lg-b{gap:6px}.lg-books img,.lg-epub{max-width:46px}.lg-epub{font-size:9px}.lg-demo p{padding:10px 14px 16px}.lg-vs{padding:7px 14px}}
+@media (max-width:350px){.lg-sub,.lg-hand{display:none}.lg-path li{gap:10px}.lg-demo p{font-size:16px}.lg-vs span{width:66px}}
+@media (min-width:900px){
+  .wrap.lg{max-width:1080px;gap:34px}
+  .lg-top{align-items:center;text-align:center;margin-top:auto}
+  .lg-h{font-size:38px}
+  .lg-sub{font-size:17px}
+  .lg-path{display:grid;grid-template-columns:repeat(3,1fr);gap:34px}
+  .lg-path li{flex-direction:column;align-items:center;gap:8px;padding:0}
+  .lg-path li:not(:last-child)::before{left:calc(50% + 24px);right:calc(-50% - 10px);top:14px;bottom:auto;border-left:0;border-top:2px dotted var(--line2)}
+  .lg-b{width:100%;flex:none;gap:14px}
+  .lg-b>b{text-align:center;font-size:17px}
+  .lg-books{justify-content:center}
+  .lg-books,.lg-rep{min-height:146px;align-content:center;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 8px 24px rgba(60,40,10,.07)}
+  .lg-rep::before{left:calc(10% + 13px);right:calc(10% + 13px);top:calc(50% - 12px)}
+  .lg-demo{min-height:146px;display:flex;flex-direction:column}
+  .lg-demo p{flex:1}
+  .lg-cta{position:static;width:100%;max-width:440px;margin:0 auto auto;padding-bottom:0}
+}
 
 /* ---------- desktop: панели справа ---------- */
 @media (min-width:900px){
@@ -387,20 +418,34 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
       <span class="lg-logo" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M8 12c5-2 11-2 16 2v24c-5-4-11-4-16-2z"/><path d="M40 12c-5-2-11-2-16 2v24c5-4 11-4 16-2z"/><path d="M29 20h6M29 25h4"/></svg></span>
       Lingua Reader
     </div>
-    <h1 class="lg-h">Читайте <span style="white-space:nowrap">по-английски.</span><br>Понимайте каждое слово.</h1>
-
-    <div class="lg-demo" aria-label="Пример: касание слова в книге показывает перевод">
-      <p lang="en">She <mark>ran into<span class="lg-tap" aria-hidden="true"></span></mark> an old friend<br>at the station.</p>
-      <div class="lg-sheet">
-        <div class="lg-row"><b lang="en">ran into</b><i>фраз. глагол</i><span class="lg-star"><svg viewBox="0 0 24 24"><path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/></svg>В словарь</span></div>
-        <div class="lg-tr">случайно встретила</div>
-      </div>
+    <div class="lg-top">
+      <h1 class="lg-h">Английские книги с&nbsp;переводом в&nbsp;одно касание</h1>
+      <p class="lg-sub">Читайте в&nbsp;оригинале. Непонятное слово переведётся по&nbsp;смыслу предложения.</p>
     </div>
 
-    <ol class="lg-steps">
-      <li><span><svg viewBox="0 0 24 24"><path d="M4 5.5C6.7 4.5 9.6 4.6 12 6.5v13c-2.4-1.9-5.3-2-8-1z"/><path d="M20 5.5c-2.7-1-5.6-.9-8 1v13c2.4-1.9 5.3-2 8-1z"/></svg></span><b>Книга</b><small>своя EPUB или из каталога</small></li>
-      <li><span><svg viewBox="0 0 24 24"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V10m0-.5a1.5 1.5 0 0 1 3 0V11m0-.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-.6a5 5 0 0 1-4-2L4.6 15.6a1.5 1.5 0 0 1 2.3-1.9L9 16"/></svg></span><b>Касание</b><small>перевод по смыслу фразы</small></li>
-      <li><span><svg viewBox="0 0 24 24"><rect x="3.5" y="7" width="13" height="13" rx="2"/><path d="M8 4h10.5A2.5 2.5 0 0 1 21 6.5V17"/></svg></span><b>Карточки</b><small>слова запоминаются сами</small></li>
+    <ol class="lg-path">
+      <li>
+        <i class="lg-n" aria-hidden="true">1</i>
+        <div class="lg-b"><b>Выберите книгу</b>
+          <div class="lg-books" aria-hidden="true"><img src="catalog/covers/lewis-carroll_alices-adventures-in-wonderland_john-tenniel.jpg" alt="" width="50" height="75"><img src="catalog/covers/arthur-conan-doyle_the-adventures-of-sherlock-holmes.jpg" alt="" width="50" height="75"><img src="catalog/covers/f-scott-fitzgerald_the-great-gatsby.jpg" alt="" width="50" height="75"><img src="catalog/covers/jane-austen_pride-and-prejudice.jpg" alt="" width="50" height="75"><span class="lg-epub"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>своя<br>EPUB</span></div>
+        </div>
+      </li>
+      <li>
+        <i class="lg-n" aria-hidden="true">2</i>
+        <div class="lg-b"><b>Коснитесь непонятного</b>
+          <div class="lg-demo" role="img" aria-label="Пример: raining cats and dogs. По словам: дождь из кошек и собак. По смыслу: лил как из ведра">
+            <p lang="en">It was <mark>raining cats and dogs<span class="lg-hand"><svg viewBox="0 0 24 24"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V10m0-.5a1.5 1.5 0 0 1 3 0V11m0-.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-.6a5 5 0 0 1-4-2L4.6 15.6a1.5 1.5 0 0 1 2.3-1.9L9 16z"/></svg></span></mark>.</p>
+            <div class="lg-vs"><span>По словам</span><s>дождь из кошек и собак</s></div>
+            <div class="lg-vs yes"><span>По смыслу</span><strong>лил как из ведра</strong></div>
+          </div>
+        </div>
+      </li>
+      <li>
+        <i class="lg-n" aria-hidden="true">3</i>
+        <div class="lg-b"><b>Повторяйте слова через</b>
+          <div class="lg-rep"><em><u>1</u>день</em><em><u>3</u>дня</em><em><u>7</u>дней</em><em><u>21</u>день</em><em class="ok"><u>60</u>дней</em></div>
+        </div>
+      </li>
     </ol>
 
     <div class="lg-cta">
