@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 
-const VER = 29; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 30; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -435,13 +435,13 @@ function renderCatalog() {
         h('b', { lang: 'en', text: x.title }), h('span', { class: 'muted', style: 'font-size:13px', lang: 'en', text: x.author }),
         h('span', { class: 'cat-meta' }, h('i', { class: 'lv', text: x.level }), fmtHours(x.words) + ' · ' + Math.round(x.words / 1000) + ' тыс. слов'),
         h('p', { text: x.about }),
-        x.adapted ? h('span', { class: 'cat-ad', text: 'Адаптировано' + (x.by ? ' · ' + x.by : '') }) : null, // упрощённый пересказ, не оригинал
+        x.adapted ? h('span', { class: 'cat-ad', text: 'Адаптировано' + (x.by ? ' · ' + x.by : '') }) : x.note ? h('span', { class: 'cat-ad', text: x.note }) : null, // adapted — упрощённый пересказ, note — другая пометка
         inLib ? h('button', { class: 'btn', style: 'min-height:38px;font-size:14px;align-self:flex-start', onclick: () => { const b = books.find(b => b.cat === x.id); closeModal(); if (b) openBook(b); } }, ico('check', 18), 'Читать')
           : h('button', { class: 'btn dark', style: 'min-height:38px;font-size:14px;align-self:flex-start', onclick: e => addFromCatalog(x, e.currentTarget) }, 'Добавить в библиотеку')));
   });
   put($('#modalBody'),
-    h('h3', { style: 'margin:0;font-family:var(--serif);font-size:22px', text: 'Бесплатная классика' }),
-    h('p', { class: 'muted', style: 'margin:-8px 0 0;font-size:14px', text: 'Книги из общественного достояния в изданиях Standard Ebooks. Добавляются одним нажатием и не занимают место в вашем облаке.' }),
+    h('h3', { style: 'margin:0;font-family:var(--serif);font-size:22px', text: 'Бесплатные книги' }),
+    h('p', { class: 'muted', style: 'margin:-8px 0 0;font-size:14px', text: 'Классика в изданиях Standard Ebooks и простые тексты для изучающих английский. Добавляются одним нажатием и не занимают место в вашем облаке.' }),
     h('div', { class: 'chips cat-chips' }, chip('all', 'Все'), LEVELS.map(([c]) => chip(c, c))),
     h('p', { style: 'margin:-8px 0 -8px;font-size:13px;color:var(--muted)' }, (lv === 'all' ? 'Все уровни' : lv + ' · ' + (LEVELS.find(x => x[0] === lv) || ['', ''])[1].toLowerCase()) + ' · ' + list.length + ' ' + plural(list.length, 'книга', 'книги', 'книг'), S.level && lv === S.level ? h('b', { style: 'color:var(--accent);font-weight:600' }, ' · ваш уровень') : null),
     h('ul', { class: 'cat-list' }, items.length ? items : h('li', { class: 'muted', text: 'Нет книг этого уровня' })));

@@ -9,6 +9,16 @@
 "about": "«Кролик Питер» и ещё 21 сказка Беатрис Поттер. Очень короткие истории, простые фразы и акварельная картинка почти на каждой странице."
 },
 {
+"id": "book-dash_picture-books",
+"title": "Picture Books for Beginners",
+"author": "Book Dash",
+"level": "A1",
+"words": 2677,
+"size": 5127678,
+"about": "10 коротких историй с картинками от Book Dash. По паре простых фраз на страницу: хорошая первая книга.",
+"note": "Для начинающих · картинки · CC BY 4.0"
+},
+{
 "id": "rudyard-kipling_just-so-stories",
 "title": "Just So Stories",
 "author": "Rudyard Kipling",
@@ -34,6 +44,17 @@
 "words": 49742,
 "size": 246874,
 "about": "Сказки Уайльда: «Счастливый принц», «Соловей и роза», «Великан-эгоист». Короткие, добрые и очень красивые."
+},
+{
+"id": "mary-godolphin_robinson-crusoe",
+"title": "Robinson Crusoe in Words of One Syllable",
+"author": "Mary Godolphin, по Дефо",
+"level": "A2",
+"words": 27307,
+"size": 90920,
+"about": "«Робинзон Крузо», пересказанный словами в один слог. Сюжет тот же, слова простые, обороты местами старинные.",
+"adapted": true,
+"by": "только односложные слова"
 },
 {
 "id": "l-frank-baum_the-wonderful-wizard-of-oz",
@@ -115,6 +136,17 @@
 "words": 60061,
 "size": 278611,
 "about": "Трое детей переезжают в деревню у железной дороги. Лёгкая семейная классика."
+},
+{
+"id": "voa_american-stories",
+"title": "American Stories",
+"author": "O. Henry, Twain, London, Poe",
+"level": "B1",
+"words": 11848,
+"size": 60102,
+"about": "Шесть знаменитых рассказов, упрощённых для изучающих английский: «Дары волхвов», «Последний лист», «Костёр», «Сердце-обличитель» и другие.",
+"adapted": true,
+"by": "learningenglish.voanews.com"
 },
 {
 "id": "arthur-conan-doyle_the-adventures-of-sherlock-holmes",
@@ -232,6 +264,17 @@
 "words": 50149,
 "size": 218171,
 "about": "«Пробуждение»: женщина в Новом Орлеане конца XIX века ищет себя."
+},
+{
+"id": "charles-lamb_mary-lamb_tales-from-shakespeare",
+"title": "Tales from Shakespeare",
+"author": "Charles Lamb and Mary Lamb",
+"level": "B2",
+"words": 101016,
+"size": 278673,
+"about": "«Ромео и Джульетта», «Гамлет», «Буря» и другие пьесы Шекспира, пересказанные прозой для юных читателей. Язык начала XIX века.",
+"adapted": true,
+"by": "пересказ пьес"
 },
 {
 "id": "f-scott-fitzgerald_the-great-gatsby",
