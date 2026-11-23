@@ -20,7 +20,7 @@ const DAILY_LIMIT = Number(Deno.env.get("DAILY_LIMIT") ?? "1500");
 const MAX_PROMPT = 16000;
 
 // Запасные модели: когда у одной кончился бесплатный лимит (429), пробуем следующую.
-// Список берём у Google для этого ключа (кэш на 6 часов), лёгкие «lite» — первыми.
+// Список берём у Google для этого ключа (кэш на 6 часов), лёгкие «lite» — первыми, preview — после обычных.
 const modelCache = new Map<string, { at: number; list: string[] }>();
 // какой вариант настроек (номер в variantOrder) подошёл каждой модели (чтобы не перебирать каждый раз)
 const goodVariant = new Map<string, number>();
@@ -54,8 +54,8 @@ async function fallbackModels(key: string): Promise<string[]> {
       list = (j.models ?? [])
         .filter((m: any) => (m.supportedGenerationMethods ?? []).includes("generateContent"))
         .map((m: any) => String(m.name).replace(/^models\//, ""))
-        .filter((n: string) => /flash/i.test(n) && !/(image|audio|tts|live|preview-tts|embedding|exp)/i.test(n));
-      const score = (n: string) => (/lite/i.test(n) ? 0 : 1) * 100 - (parseFloat((n.match(/(\d+(\.\d+)?)/) ?? ["0"])[0]) || 0);
+        .filter((n: string) => /flash/i.test(n) && !/(image|audio|tts|live|omni|embedding|exp)/i.test(n));
+      const score = (n: string) => (/lite/i.test(n) ? 0 : 100) + (/preview|latest/i.test(n) ? 50 : 0) - (parseFloat((n.match(/(\d+(\.\d+)?)/) ?? ["0"])[0]) || 0);
       list.sort((a, b) => score(a) - score(b));
     }
   } catch { /* без списка — работаем только с основной моделью */ }
@@ -63,9 +63,9 @@ async function fallbackModels(key: string): Promise<string[]> {
   return list;
 }
 
-const fail = (status: number, message: string, code = "") =>
+const fail = (status: number, message: string, code = "", extra: Record<string, string> = {}) =>
   new Response(JSON.stringify({ error: { message, code } }), {
-    status, headers: { ...CORS, "Content-Type": "application/json", "x-lr-region": REGION },
+    status, headers: { ...CORS, "Content-Type": "application/json", "x-lr-region": REGION, ...extra },
   });
 
 Deno.serve(async (req) => {
@@ -130,19 +130,17 @@ Deno.serve(async (req) => {
     : Number((m.match(/^gemini-(\d+)/) ?? [])[1] ?? 0) >= 3 ? [1, 2, 0, 3, 4, 5]
     : [0, 1, 2, 3, 4, 5];
   const body = (v: number) => JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: VARIANTS[v] });
-  // ждём начала ответа: основную модель 7 с, запасные 10 с; молчание считаем перегрузкой (504)
-  const call = async (m: string, v: number) => {
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), m === model ? 7000 : 10000);
+  // обрыв (другая модель ответила раньше) и сбой сети — как 504
+  const call = async (m: string, v: number, signal: AbortSignal) => {
     try {
       return await fetch(urlFor(m), {
-        method: "POST", signal: ctl.signal, headers: { "Content-Type": "application/json", "x-goog-api-key": sec.api_key }, body: body(v),
+        method: "POST", signal, headers: { "Content-Type": "application/json", "x-goog-api-key": sec.api_key }, body: body(v),
       });
-    } catch { return new Response("", { status: 504 }); } finally { clearTimeout(timer); }
+    } catch { return new Response("", { status: 504 }); }
   };
-  const tryModel = async (m: string) => {
+  const tryModel = async (m: string, signal: AbortSignal) => {
     const vs = variantOrder(m);
-    const send = (i: number) => timed("gemini", call(m, vs[i]), (x) => m + " v" + vs[i] + " " + x.status);
+    const send = (i: number) => timed("gemini", call(m, vs[i], signal), (x) => m + " v" + vs[i] + " " + x.status);
     let i = goodVariant.get(m) ?? 0;
     let r = await send(i);
     while (r.status === 400 && i < vs.length - 1) {
@@ -155,43 +153,69 @@ Deno.serve(async (req) => {
   };
 
   const key = sec.api_key;
-  let used = model, tried = 0;
   const saw = new Set<Why>();
   const skip = (m: string) => { const o = outOf(key, m); if (o) saw.add(o.why); return !!o; };
-  // один заход на модель; null — лимит, перегрузка или нет такой модели, пробуем следующую
-  const attempt = async (m: string): Promise<Response | null> => {
-    tried++;
-    const res = await tryModel(m);
-    if (res.status === 429) { markOut(key, m, await res.text().catch(() => "")); skip(m); return null; }
-    if (res.status >= 500) { await res.body?.cancel(); markBusy(key, m); skip(m); return null; }
-    if (res.status === 404) { await res.body?.cancel(); return null; }
-    used = m; return res;
-  };
-  let r: Response | null = skip(model) ? null : await attempt(model);
-  // запасные модели (и их список у Google) нужны, только если основная не ответила
-  if (!r) {
-    for (const m of await timed("models", fallbackModels(key))) {
-      if (m === model || skip(m)) continue;
-      if (tried >= 6 || performance.now() - t00 > 14_000) break; // сайт ждёт ответа не дольше 25 с
-      r = await attempt(m);
-      if (r) break;
-    }
+  // Гонка: основная модель, а если она молчит HEDGE мс или отказала — параллельно следующая.
+  // Побеждает первый ответ, остальные запросы обрываем. Сайт ждёт до 25 с, мы сдаёмся раньше.
+  const HEDGE = 2500, DEADLINE = 18_000, MAX_TRIES = 6;
+  const race = () => new Promise<{ m: string; res: Response } | null>((resolve) => {
+    const flying = new Map<string, AbortController>();
+    let over = false, tried = 0, pending = 0, hedge = 0, queue: string[] | null = null;
+    const finish = (v: { m: string; res: Response } | null) => {
+      if (over) return;
+      over = true; clearTimeout(hedge); clearTimeout(deadline);
+      for (const [m, c] of flying) {
+        if (m === v?.m) continue;
+        timing.push('slow;desc="' + m + '"'); markBusy(key, m); c.abort(); // полминуты начинаем не с неё
+      }
+      if (!v && flying.size) saw.add("busy");
+      resolve(v);
+    };
+    const deadline = setTimeout(() => finish(null), DEADLINE);
+    const pick = async (): Promise<string | null> => {
+      if (tried >= MAX_TRIES) return null;
+      if (tried === 0 && !queue && !skip(model)) return model;
+      if (!queue) queue = [...await timed("models", fallbackModels(key))].filter((m) => m !== model);
+      while (queue.length) { const m = queue.shift()!; if (!skip(m)) return m; }
+      return tried === 0 ? model : null; // все отмечены недоступными — проверяем основную ещё раз
+    };
+    const launch = async () => {
+      clearTimeout(hedge);
+      if (over) return;
+      pending++;
+      const m = await pick();
+      if (over || !m || flying.has(m)) { pending--; if (!over && pending === 0) finish(null); return; }
+      tried++;
+      const ctl = new AbortController(); flying.set(m, ctl);
+      hedge = setTimeout(launch, HEDGE) as unknown as number;
+      const res = await tryModel(m, ctl.signal);
+      pending--;
+      if (over) { if (!res.bodyUsed) await res.body?.cancel(); return; }
+      flying.delete(m);
+      if (res.status === 429) { markOut(key, m, await res.text().catch(() => "")); skip(m); }
+      else if (res.status >= 500) { await res.body?.cancel(); markBusy(key, m); skip(m); }
+      else if (res.status === 404 || (!res.ok && m !== model)) { if (!res.bodyUsed) await res.body?.cancel(); }
+      else { flying.set(m, ctl); return finish({ m, res }); }
+      launch();
+    };
+    launch();
+  });
+  const won = await race();
+  const serverTiming = () => ({ "Server-Timing": [...timing, "total;dur=" + Math.round(performance.now() - t00)].join(", ") });
+  if (!won) {
+    const st = serverTiming();
+    if (saw.has("busy")) return fail(503, "Модели Google сейчас перегружены. Коснитесь слова ещё раз через полминуты.", "busy", st);
+    if (saw.has("day")) return fail(429, "Бесплатный лимит Google на сегодня исчерпан для всех доступных моделей. Попробуйте позже или завтра.", "quota", st);
+    if (saw.has("minute")) return fail(429, "Слишком много переводов подряд. Подождите минуту и коснитесь слова ещё раз.", "quota", st);
+    return fail(404, "Модель «" + model + "» не найдена. Смените модель в профиле.", "model", st);
   }
-  if (!r && tried === 0) r = await attempt(model); // все отмечены исчерпанными — проверяем основную ещё раз
-  if (!r) {
-    if (!saw.size) return fail(404, "Модель «" + model + "» не найдена. Смените модель в профиле.", "model");
-    if (saw.has("busy")) return fail(503, "Модели Google сейчас перегружены. Коснитесь слова ещё раз через полминуты.", "busy");
-    return saw.has("day")
-      ? fail(429, "Бесплатный лимит Google на сегодня исчерпан для всех доступных моделей. Попробуйте позже или завтра.", "quota")
-      : fail(429, "Слишком много переводов подряд. Подождите минуту и коснитесь слова ещё раз.", "quota");
-  }
-  timing.push("total;dur=" + Math.round(performance.now() - t00));
+  const { m: used, res: r } = won;
   if (!r.ok) {
     const text = await r.text().catch(() => "");
-    return new Response(text, { status: r.status, headers: { ...CORS, "Content-Type": "application/json", "x-lr-region": REGION } });
+    return new Response(text, { status: r.status, headers: { ...CORS, "Content-Type": "application/json", "x-lr-region": REGION, ...serverTiming() } });
   }
   return new Response(r.body, {
     status: 200,
-    headers: { ...CORS, "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "x-lr-region": REGION, "x-lr-model": used, "Server-Timing": timing.join(", ") },
+    headers: { ...CORS, "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "x-lr-region": REGION, "x-lr-model": used, ...serverTiming() },
   });
 });

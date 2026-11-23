@@ -107,13 +107,23 @@ async function pull() {
   for (const row of all) { if (row.deleted) continue; if (row.kind === 'set') set = row.data; else if (by[row.kind]) by[row.kind].push(row.data); }
   for (const it of Object.values(queue)) { if (it.kind === 'set') continue; const arr = by[it.kind]; const i = arr.findIndex(x => x.id === it.id); if (it.data) { if (i >= 0) arr[i] = it.data; else arr.push(it.data); } else if (i >= 0) arr.splice(i, 1); }
   const byT = (a, b) => (b.t || b.added || 0) - (a.t || a.added || 0);
+  // книги обновляем на месте: читалка держит ссылку на объект, а более свежее место чтения с устройства не теряем
+  const mine = new Map(books.map(b => [b.id, b])), ahead = {};
+  by.book = by.book.map(d => {
+    const o = mine.get(d.id); if (!o || o === d) return d;
+    const keep = {};
+    if ((o.lastRead || 0) > (d.lastRead || 0)) { for (const k of ['cfi', 'pct', 'left', 'chapter', 'lastRead']) if (o[k] !== undefined) keep[k] = o[k]; ahead[d.id] = JSON.stringify(d); }
+    return Object.assign(o, d, keep);
+  });
   books = by.book.sort(byT); words = by.word.sort(byT); notes = by.note.sort(byT); marks = by.mark.sort(byT); days = by.day;
   if (set && !queue['set|S']) { S = Object.assign({}, DEF, set); fixModel(); }
   LS.set('lr_books', books); LS.set('lr_words', words); LS.set('lr_notes', notes); LS.set('lr_marks', marks); LS.set('lr_days', days); LS.set('lr_s', S);
   snap = EMPTY_SNAP();
   for (const k of Object.keys(KARR)) for (const o of KARR[k]()) snap[k][o.id] = JSON.stringify(o);
+  Object.assign(snap.book, ahead); // место на устройстве новее серверного — отправить
   snap.set.S = JSON.stringify(S);
   LS.set('lr_snap', snap);
+  if (Object.keys(ahead).length) schedule();
 }
 const bookPath = b => user.id + '/' + b.id + '.epub';
 async function uploadBook(b, buf) {
@@ -259,7 +269,12 @@ function apiError(status, data) {
   return m;
 }
 const NET_HINT = 'Google не отвечает. Похоже, VPN пропускает сайт Gemini, но не адрес API generativelanguage.googleapis.com. Включите в VPN весь трафик (глобальный режим) или добавьте домен googleapis.com и повторите.';
-const timings = []; // замеры последних переводов, в консоли: __lr.timings
+const timings = LS.get('lr_timings', []); // замеры последних переводов: Профиль → Замеры перевода
+const addTiming = (rec, more) => { timings.push(Object.assign(rec, more)); while (timings.length > 30) timings.shift(); LS.set('lr_timings', timings); };
+async function copyTimings() {
+  const txt = JSON.stringify({ site: location.host, timings });
+  try { await navigator.clipboard.writeText(txt); toast('Замеры скопированы'); } catch (e) { prompt('Скопируйте замеры', txt); }
+}
 async function gemini(prompt, outerSignal, onPartial, keyOverride, timeoutMs = 25000) {
   const key = keyOverride || getKey();
   const ctl = new AbortController(); let timedOut = false, timer = null;
@@ -272,9 +287,9 @@ async function gemini(prompt, outerSignal, onPartial, keyOverride, timeoutMs = 2
   const seen = r => { if (!rec.first && r.translation) rec.first = since(); onPartial && onPartial(r); };
   try {
     const res = await geminiInner(prompt, signal, seen, key, arm);
-    timings.push(Object.assign(rec, { total: since(), model: CLOUD ? lastModel : S.model, server: lastTiming, end: lastEnd, keys: Object.keys(res || {}).join(',') })); if (timings.length > 30) timings.shift();
+    addTiming(rec, { total: since(), model: CLOUD ? lastModel : S.model, server: lastTiming, end: lastEnd, keys: Object.keys(res || {}).join(',') });
     return res;
-  } catch (e) { if (e.name !== 'AbortError' || timedOut) { timings.push(Object.assign(rec, { total: since(), model: S.model, server: lastTiming, end: timedOut ? 'timeout' : 'fail' })); if (timings.length > 30) timings.shift(); } throw fail(e); } finally { clearTimeout(timer); }
+  } catch (e) { addTiming(rec, { total: since(), model: S.model, server: lastTiming, end: timedOut ? 'timeout' : e.name === 'AbortError' ? 'closed' : 'fail' }); throw fail(e); } finally { clearTimeout(timer); }
 }
 async function geminiInner(prompt, signal, onPartial, key, arm) {
   let r;
@@ -642,6 +657,7 @@ function renderProfile() {
     row('Ключ перевода', k ? 'Gemini ••••' + k.slice(-4) : 'не задан', () => openKey('Profile')),
     row('Модель', S.model + (lastModel && lastModel !== S.model ? ' (сейчас: ' + lastModel + ')' : ''), () => { const m = prompt('Название модели Gemini', S.model); if (m && m.trim()) { S.model = m.trim(); saveS(); renderProfile(); } }),
     CLOUD && lastRegion ? h('li', null, h('span', { style: 'flex:1;font-size:15px;min-height:44px;display:flex;align-items:center', text: 'Сервер перевода' }), h('span', { class: 'muted', style: 'font-size:14px;padding-right:10px', text: (REGION_NAMES[lastRegion] || lastRegion) })) : null,
+    timings.length ? row('Замеры перевода', 'скопировать', copyTimings) : null,
     row('Очистить кэш переводов', Object.keys(cache).length + ' шт.', () => { if (confirm('Очистить сохранённые переводы? Слова в словаре останутся.')) { for (const x in cache) delete cache[x]; LS.set('lr_cache', {}); renderProfile(); } }),
     CLOUD && user ? row('Выйти', '', async () => { if (!confirm('Выйти из аккаунта на этом устройстве?')) return; await flush(); await sb.auth.signOut(); }) : null
   );
@@ -691,6 +707,14 @@ async function openBook(b, atCfi) {
   let start = atCfi || b.cfi || undefined;
   if (!start && b.cat) { try { await bk.loaded.spine; const it = bk.spine.spineItems.find(x => !/(titlepage|imprint|halftitle)/i.test(x.href || '')); if (it) start = it.href; } catch (e) {} } // книги каталога: сразу к тексту, без служебных страниц
   try { await rendition.display(start); } catch (e) { try { await rendition.display(); } catch (e2) {} }
+  // шрифт и размер меняют раскладку уже после показа, и страница съезжает назад: ждём их и встаём на место ещё раз
+  if (start && /^epubcfi/.test(start)) {
+    try {
+      await Promise.race([Promise.all(rendition.getContents().map(c => c.document.fonts ? c.document.fonts.ready : 0)), new Promise(r => setTimeout(r, 1200))]);
+      await new Promise(r => setTimeout(r, 250)); // ResizeObserver успевает отработать
+      if (book === bk) await rendition.display(start);
+    } catch (e) {}
+  }
   $('#loading').style.display = 'none';
   if (book !== bk) return;
   b.lastRead = Date.now(); saveBooks();
@@ -764,7 +788,7 @@ function updProgress(loc) {
 function onRelocated(loc) {
   act(); if (isBubble()) closeBubble();
   lastLoc = loc; markChapter(loc); updProgress(loc); updMarkBtn();
-  if (curBook) { curBook.cfi = loc.start.cfi; curBook.chapter = curChapter; curBook.lastRead = Date.now(); clearTimeout(progT); progT = setTimeout(saveBooks, 600); }
+  if (curBook) { curBook.cfi = loc.start.cfi; curBook.chapter = curChapter; curBook.lastRead = Date.now(); clearTimeout(progT); progT = setTimeout(() => { progT = null; saveBooks(); }, 600); }
 }
 function applyReader() {
   applyTheme();
@@ -1252,7 +1276,8 @@ async function afterLogin() {
     LS.set('lr_queue', queue); LS.set('lr_snap', snap);
   }
   show('Lib'); $('#bookList').replaceChildren(h('li', { class: 'empty', style: 'display:block;border:0' }, h('span', { class: 'spin' }), '  Загружаю библиотеку…'));
-  try { await withTimeout(pull(), 12000); } catch (e) { console.warn(e); toast('Нет связи с сервером — показываю сохранённое на устройстве', 4000); }
+  const pulling = pull();
+  try { await withTimeout(pulling, 12000); } catch (e) { console.warn(e); pulling.then(() => { if (current === 'Lib') renderLib(); updBadge(); }).catch(() => {}); toast('Нет связи с сервером — показываю сохранённое на устройстве', 4000); }
   try { const r = await withTimeout(sb.rpc('get_key_status'), 8000); keyLast4 = (r.data && r.data[0] && r.data[0].last4) || ''; } catch (e) {}
   applyTheme(); ensureUploads();
   nextAfterLogin();
@@ -1284,7 +1309,9 @@ async function boot() {
   if (qs.get('code')) $('#loginMsg').replaceChildren(h('div', { class: 'muted' }, h('span', { class: 'spin' }), '  Входим…'));
 }
 addEventListener('online', () => flush());
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+const saveNow = () => { if (progT) { clearTimeout(progT); progT = null; saveBooks(); } };
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { saveNow(); flush(); } });
+addEventListener('pagehide', saveNow);
 boot();
 $('#keySkip').addEventListener('click', () => LS.set('lr_skipkey', true));
 window.__lr = { get rendition() { return rendition; }, get book() { return book; }, S, timings };
