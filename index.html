@@ -203,12 +203,17 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 #scrim{position:fixed;inset:0;z-index:40;background:rgba(20,18,15,.28);opacity:0;pointer-events:none;transition:opacity .2s}
 #scrim.on{opacity:1;pointer-events:auto}
 #scrim.clear{background:transparent}
-#modal{position:fixed;z-index:41;left:0;right:0;bottom:0;background:var(--card);border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.18);transform:translateY(110%);transition:transform .26s cubic-bezier(.2,.8,.3,1);max-height:calc(100dvh - var(--safe-t) - 60px);display:flex;flex-direction:column}
+#modal{position:fixed;z-index:41;left:0;right:0;bottom:0;background:var(--card);border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.18);transform:translateY(110%);transition:transform .26s cubic-bezier(.2,.8,.3,1);max-height:calc(100dvh - var(--safe-t) - 60px);display:flex;flex-direction:column;overflow:hidden}
 #modal.open{transform:none}
 #modal.tall{height:calc(100dvh - var(--safe-t) - 110px)}
 #modal .grab{flex:none;height:26px;display:flex;align-items:center;justify-content:center}
 #modal .grab span{width:40px;height:5px;border-radius:3px;background:var(--line2)}
 #modalBody{flex:1;overflow:auto;padding:0 20px calc(var(--safe-b) + 22px);display:flex;flex-direction:column;gap:16px}
+/* ползунок внутри скруглённого окна: тонкий и с отступом от углов */
+#modalBody::-webkit-scrollbar{width:12px}
+#modalBody::-webkit-scrollbar-track{margin:16px 0;background:transparent}
+#modalBody::-webkit-scrollbar-thumb{border:4px solid transparent;border-radius:999px;background:var(--line2) content-box}
+@supports not selector(::-webkit-scrollbar){#modalBody{scrollbar-width:thin;scrollbar-color:var(--line2) transparent}}
 #modalBody h3{margin:0;font-size:17px;font-weight:700}
 .aa-row{display:flex;align-items:center;gap:12px}
 .aa-row>span{width:82px;flex:none;font-size:14px;color:var(--ink2)}
@@ -300,7 +305,8 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 .st-sec{margin:8px 0 -4px;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 
 /* ---------- каталог ---------- */
-.cat-chips{position:sticky;top:0;z-index:2;flex:none;background:var(--card);padding:6px 0}
+.cat-chips{position:sticky;top:0;z-index:2;flex:none;background:var(--card);padding:8px 0;margin:0;display:grid;grid-template-columns:repeat(6,1fr);gap:6px;overflow:visible}
+.cat-chips .chip{justify-content:center;padding:0;min-height:40px;font-size:14px}
 #modalBody>*{flex-shrink:0}
 .cat-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 .cat-it{display:flex;gap:14px;padding:14px 0;border-top:1px solid var(--line)}
@@ -309,6 +315,8 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 .cat-tx b{font-family:var(--serif);font-size:17px;line-height:1.2}
 .cat-tx p{margin:4px 0 8px;font-size:14px;line-height:1.4;color:var(--ink2)}
 .cat-meta{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.cat-ad{align-self:flex-start;margin:0 0 8px;padding:2px 8px;border-radius:6px;background:var(--hl);color:#4A3A0C;font-size:12px;font-weight:600}
+body[data-theme=night] .cat-ad{color:#FBF2D6}
 .cat-meta .lv{font-style:normal;font-weight:700;font-size:11px;padding:2px 6px;border-radius:5px;background:var(--accent-soft);color:var(--accent)}
 
 /* ---------- пузырь перевода (компьютер) ---------- */
@@ -327,9 +335,10 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 
 /* ---------- экран входа ---------- */
 .wrap.lg{padding:calc(var(--safe-t) + 8px) 8px 0;gap:18px;max-width:460px}
-.lg-brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;letter-spacing:.01em}
-.lg-logo{width:34px;height:34px;border-radius:10px;background:#2F6F5E;display:flex;align-items:center;justify-content:center}
-.lg-logo svg{width:22px;height:22px;fill:none;stroke:#FBF8F1;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.brand,.lg-brand{display:flex;align-items:center;gap:11px;margin:0}
+.logo{width:40px;height:40px;flex:none;display:block}
+.lw{font-family:var(--serif);font-size:23px;font-weight:600;line-height:1;letter-spacing:-.01em}
+.lw i{font-style:normal;color:var(--accent)}
 .lg-top{display:flex;flex-direction:column;gap:8px}
 .lg-h{margin:0;text-wrap:balance;font-family:var(--serif);font-size:28px;line-height:1.16;font-weight:600;letter-spacing:-.01em}
 .lg-sub{margin:0;font-size:15px;line-height:1.45;color:var(--ink2);text-wrap:pretty}
@@ -412,11 +421,19 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 <body class="tabs">
 
 <!-- вход -->
+<!-- логотип: открытая книга, слева выделенная английская «a», справа русская «я» -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="logo" viewBox="0 0 48 48">
+  <rect width="48" height="48" rx="13" fill="#2F6F5E"/>
+  <path fill="#FBF8F1" d="M7 13.6c0-.9.6-1.6 1.5-1.8 5.2-1 10.3 0 14.5 2.7v22.9c-4.2-2.6-9.2-3.5-14.2-2.6-1 .2-1.8-.6-1.8-1.6z"/>
+  <path fill="#E4F0E8" d="M41 13.6c0-.9-.6-1.6-1.5-1.8-5.2-1-10.3 0-14.5 2.7v22.9c4.2-2.6 9.2-3.5 14.2-2.6 1 .2 1.8-.6 1.8-1.6z"/>
+  <rect x="8.8" y="20.2" width="12.8" height="10" rx="2" fill="#F6D978"/>
+  <text x="15.2" y="29" text-anchor="middle" font-family="Literata,Georgia,serif" font-weight="700" font-size="18" fill="#2A2620">a</text>
+  <text x="32.8" y="29" text-anchor="middle" font-family="Literata,Georgia,serif" font-weight="700" font-size="18" fill="#2F6F5E">я</text>
+</symbol></svg>
 <section id="sLogin" class="screen" aria-label="Вход">
   <div class="scroll" style="padding-bottom:calc(var(--safe-b) + 28px)"><div class="wrap lg" style="min-height:100%">
     <div class="lg-brand">
-      <span class="lg-logo" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M8 12c5-2 11-2 16 2v24c-5-4-11-4-16-2z"/><path d="M40 12c-5-2-11-2-16 2v24c5-4 11-4 16-2z"/><path d="M29 20h6M29 25h4"/></svg></span>
-      Lingua Reader
+      <svg class="logo" aria-hidden="true"><use href="#logo"/></svg><span class="lw">Lingua <i>Reader</i></span>
     </div>
     <div class="lg-top">
       <h1 class="lg-h">Английские книги с&nbsp;переводом в&nbsp;одно касание</h1>
@@ -500,7 +517,7 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 <!-- библиотека -->
 <section id="sLib" class="screen" aria-label="Библиотека">
   <div class="scroll"><div class="wrap">
-    <header style="display:flex;align-items:center;justify-content:space-between"><h1 class="title" style="font-size:24px">Lingua Reader</h1></header>
+    <header style="display:flex;align-items:center;justify-content:space-between"><h1 class="brand"><svg class="logo" aria-hidden="true"><use href="#logo"/></svg><span class="lw">Lingua <i>Reader</i></span></h1></header>
     <div id="contBox"></div>
     <div style="display:flex;align-items:center;gap:8px">
       <h2 style="margin:0;font-size:18px;font-weight:700;flex:1">Мои книги</h2>
