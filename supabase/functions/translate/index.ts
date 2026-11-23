@@ -25,7 +25,7 @@ const modelCache = new Map<string, { at: number; list: string[] }>();
 // какой вариант настроек (номер в variantOrder) подошёл каждой модели (чтобы не перебирать каждый раз)
 const goodVariant = new Map<string, number>();
 // модели, у которых кончился лимит: не дёргаем, пока Google не начнёт принимать их снова
-type Why = "day" | "minute" | "busy";
+type Why = "day" | "minute" | "busy" | "gone";
 const exhausted = new Map<string, { until: number; why: Why }>();
 const outOf = (key: string, m: string) => { const e = exhausted.get(key.slice(-8) + "|" + m); return e && e.until > Date.now() ? e : null; };
 // дневные лимиты Google сбрасываются в полночь по тихоокеанскому времени
@@ -42,6 +42,8 @@ function markOut(key: string, m: string, text: string) {
   exhausted.set(key.slice(-8) + "|" + m, { until: Date.now() + ms, why: daily ? "day" : "minute" });
 }
 // модель перегружена у Google или молчит: полминуты её не ждём
+// модели нет у этого ключа (404): не пробуем 6 часов
+const markGone = (key: string, m: string) => exhausted.set(key.slice(-8) + "|" + m, { until: Date.now() + 6 * 3600_000, why: "gone" });
 const markBusy = (key: string, m: string) => exhausted.set(key.slice(-8) + "|" + m, { until: Date.now() + 30_000, why: "busy" });
 async function fallbackModels(key: string): Promise<string[]> {
   const hit = modelCache.get(key);
@@ -92,10 +94,11 @@ Deno.serve(async (req) => {
   const uid = u.user.id;
 
   // 2. что спрашивает
-  let prompt = "", model = "gemini-3.8-flash";
+  let prompt = "", model = "gemini-3.8-flash", avoid = "";
   try {
     const b = await req.json();
     prompt = String(b.prompt ?? "");
+    avoid = typeof b.avoid === "string" ? b.avoid : ""; // модель, которая только что оборвала ответ
     if (typeof b.model === "string" && /^[a-z0-9.\-]{3,60}$/i.test(b.model)) model = b.model;
   } catch { /* пусто */ }
   if (!prompt) return fail(400, "Пустой запрос");
@@ -127,6 +130,7 @@ Deno.serve(async (req) => {
   ];
   // с Gemini 3 раздумья задаются уровнем, раньше — бюджетом
   const variantOrder = (m: string) => m === "gemini-3.8-flash" ? [2, 1, 0, 3, 4, 5]
+    : /latest$/.test(m) ? [1, 2, 0, 3, 4, 5]
     : Number((m.match(/^gemini-(\d+)/) ?? [])[1] ?? 0) >= 3 ? [1, 2, 0, 3, 4, 5]
     : [0, 1, 2, 3, 4, 5];
   const body = (v: number) => JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: VARIANTS[v] });
@@ -152,21 +156,50 @@ Deno.serve(async (req) => {
     return r;
   };
 
+  // Ответ 200 ещё не значит успех: при перегрузке Google присылает ошибку внутри потока или пустой поток.
+  // Читаем первый кусок до того, как объявить победителя; за остальными следим, чтобы не начинать с этой модели снова.
+  const isErr = (t: string) => /data:\s*\{\s*"error"/.test(t);
+  const peek = async (res: Response, m: string): Promise<Response> => {
+    const bad = () => { timing.push('empty;desc="' + m + '"'); return new Response("", { status: 503 }); };
+    if (!res.body) return bad();
+    const rd = res.body.getReader(), dec = new TextDecoder(), head: Uint8Array[] = []; let t = "";
+    try {
+      while (!/data:[^\n]*\n/.test(t)) {
+        const { value, done } = await rd.read(); if (done) break;
+        head.push(value); t += dec.decode(value, { stream: true });
+      }
+    } catch { return bad(); }
+    if (!/data:/.test(t) || isErr(t)) { rd.cancel().catch(() => {}); return bad(); }
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) { head.forEach((h) => c.enqueue(h)); },
+      async pull(c) {
+        try {
+          const { value, done } = await rd.read();
+          if (done) return c.close();
+          if (isErr(new TextDecoder().decode(value))) markBusy(key, m);
+          c.enqueue(value);
+        } catch { markBusy(key, m); c.close(); }
+      },
+      cancel(r) { rd.cancel(r).catch(() => {}); },
+    });
+    return new Response(stream, { status: 200 });
+  };
   const key = sec.api_key;
   const saw = new Set<Why>();
-  const skip = (m: string) => { const o = outOf(key, m); if (o) saw.add(o.why); return !!o; };
+  const skip = (m: string) => { if (m === avoid) return true; const o = outOf(key, m); if (o) saw.add(o.why); return !!o; };
   // Гонка: основная модель, а если она молчит HEDGE мс или отказала — параллельно следующая.
   // Побеждает первый ответ, остальные запросы обрываем. Сайт ждёт до 25 с, мы сдаёмся раньше.
-  const HEDGE = 2500, DEADLINE = 18_000, MAX_TRIES = 6;
+  const HEDGE = 1200, DEADLINE = 18_000, MAX_TRIES = 6;
   const race = () => new Promise<{ m: string; res: Response } | null>((resolve) => {
-    const flying = new Map<string, AbortController>();
+    const flying = new Map<string, AbortController>(), since = new Map<string, number>();
     let over = false, tried = 0, pending = 0, hedge = 0, queue: string[] | null = null;
     const finish = (v: { m: string; res: Response } | null) => {
       if (over) return;
       over = true; clearTimeout(hedge); clearTimeout(deadline);
       for (const [m, c] of flying) {
         if (m === v?.m) continue;
-        timing.push('slow;desc="' + m + '"'); markBusy(key, m); c.abort(); // полминуты начинаем не с неё
+        timing.push('slow;desc="' + m + '"'); c.abort();
+        if (performance.now() - (since.get(m) ?? 0) >= 1000) markBusy(key, m); // правда медленная: полминуты начинаем не с неё
       }
       if (!v && flying.size) saw.add("busy");
       resolve(v);
@@ -186,15 +219,16 @@ Deno.serve(async (req) => {
       const m = await pick();
       if (over || !m || flying.has(m)) { pending--; if (!over && pending === 0) finish(null); return; }
       tried++;
-      const ctl = new AbortController(); flying.set(m, ctl);
+      const ctl = new AbortController(); flying.set(m, ctl); since.set(m, performance.now());
       hedge = setTimeout(launch, HEDGE) as unknown as number;
-      const res = await tryModel(m, ctl.signal);
+      let res = await tryModel(m, ctl.signal);
+      if (res.ok) res = await peek(res, m);
       pending--;
       if (over) { if (!res.bodyUsed) await res.body?.cancel(); return; }
       flying.delete(m);
       if (res.status === 429) { markOut(key, m, await res.text().catch(() => "")); skip(m); }
       else if (res.status >= 500) { await res.body?.cancel(); markBusy(key, m); skip(m); }
-      else if (res.status === 404 || (!res.ok && m !== model)) { if (!res.bodyUsed) await res.body?.cancel(); }
+      else if (res.status === 404 || (!res.ok && m !== model)) { if (res.status === 404 && m !== model) markGone(key, m); if (!res.bodyUsed) await res.body?.cancel(); }
       else { flying.set(m, ctl); return finish({ m, res }); }
       launch();
     };

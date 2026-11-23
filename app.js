@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 
-const VER = 35; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 36; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -300,7 +300,7 @@ function partialParse(txt) {
     const m = txt.match(new RegExp('"' + k + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"')); if (m && m[1]) r[k] = un(m[1]);
   });
   const ex = [...txt.matchAll(/\{\s*"en"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"ru"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}/g)].map(m => ({ en: un(m[1]), ru: un(m[2]) }));
-  if (ex.length) r.examples = ex;
+  if (ex.length) r[/"phrases"\s*:/.test(txt) ? 'phrases' : 'examples'] = ex;
   return r;
 }
 function apiError(status, data) {
@@ -322,7 +322,7 @@ async function copyTimings() {
     + '\n' + posLog.slice(-3).map(p => 'место ' + [p.saved, p.opened, p.after].map(v => v == null ? '-' : Math.round(v * 1000) / 10).join('>') + (p.fixed ? ' исправлено' : '') + (p.err ? ' ' + p.err : '')).join('\n');
   try { await navigator.clipboard.writeText(txt); toast('Отчёт скопирован, вставьте его в сообщение'); } catch (e) { prompt('Скопируйте отчёт', txt); }
 }
-async function gemini(prompt, outerSignal, onPartial, keyOverride, timeoutMs = 25000) {
+async function gemini(prompt, outerSignal, onPartial, keyOverride, timeoutMs = 25000, avoid = '') {
   const key = keyOverride || getKey();
   const ctl = new AbortController(); let timedOut = false, timer = null;
   const arm = () => { clearTimeout(timer); timer = setTimeout(() => { timedOut = true; ctl.abort(); }, timeoutMs); };
@@ -333,18 +333,18 @@ async function gemini(prompt, outerSignal, onPartial, keyOverride, timeoutMs = 2
   const t0 = performance.now(), since = () => Math.round(performance.now() - t0), rec = { first: 0 }; lastTiming = '';
   const seen = r => { if (!rec.first && r.translation) rec.first = since(); onPartial && onPartial(r); };
   try {
-    const res = await geminiInner(prompt, signal, seen, key, arm);
+    const res = await geminiInner(prompt, signal, seen, key, arm, avoid);
     addTiming(rec, { total: since(), model: CLOUD ? lastModel : S.model, server: lastTiming, end: lastEnd, keys: Object.keys(res || {}).join(',') });
     return res;
   } catch (e) { addTiming(rec, { total: since(), model: S.model, server: lastTiming, end: timedOut ? 'timeout' : e.name === 'AbortError' ? 'closed' : 'fail' }); throw fail(e); } finally { clearTimeout(timer); }
 }
-async function geminiInner(prompt, signal, onPartial, key, arm) {
+async function geminiInner(prompt, signal, onPartial, key, arm, avoid) {
   let r;
   if (CLOUD) {
     const { data: { session } } = await sb.auth.getSession();
     if (!session) throw new Error('Сессия истекла. Обновите страницу и войдите заново.');
     const fnUrl = CFG.SUPABASE_URL.replace(/\/+$/, '') + '/functions/v1/translate?forceFunctionRegion=' + encodeURIComponent(CFG.REGION || 'eu-west-3');
-    try { r = await fetch(fnUrl, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token, 'apikey': CFG.SUPABASE_KEY }, body: JSON.stringify({ prompt, model: S.model }) }); }
+    try { r = await fetch(fnUrl, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token, 'apikey': CFG.SUPABASE_KEY }, body: JSON.stringify({ prompt, model: S.model, avoid }) }); }
     catch (e) { if (e.name === 'AbortError') throw e; throw new Error('Нет связи с сервером перевода. Проверьте интернет.'); }
     arm();
     lastRegion = r.headers.get('x-lr-region') || lastRegion; lastModel = r.headers.get('x-lr-model') || lastModel; lastTiming = r.headers.get('server-timing') || '';
@@ -380,10 +380,11 @@ async function readStream(r, onPartial, arm) {
   try { return whole(txt); } catch (e) {}
   const a = txt.indexOf('{'), b = txt.lastIndexOf('}'); if (a >= 0 && b > a) { try { return whole(txt.slice(a, b + 1)); } catch (e) {} }
   const p = partialParse(txt); if (p.translation) return p;
-  throw new Error(streamErr ? 'Модель Google сейчас перегружена. Коснитесь слова ещё раз.' : 'Модель ответила неожиданно. Коснитесь слова ещё раз.');
+  throw Object.assign(new Error(streamErr ? 'Модель Google сейчас перегружена. Коснитесь слова ещё раз.' : 'Модель ответила неожиданно. Коснитесь слова ещё раз.'), { retry: true });
 }
 // ответ дошёл до конца (обрывки не кэшируем); у записей старого формата вместо пометки есть перевод предложения
 const isFull = r => !!r && !!r.translation && (!!r._ok || (r.sentence_translation != null && r.examples != null));
+const isFresh = (c, r) => isFull(r) && (r._v === 2 || (isPhrase(c.sel) ? Array.isArray(r.phrases) : Array.isArray(r.examples) && r.examples.some(x => x && x.en)));
 
 /* ================= библиотека ================= */
 async function readMeta(buf, fallback) {
@@ -969,7 +970,7 @@ function onTap(e, contents) {
     range = contents.document.createRange();
     if (wr.compareBoundaryPoints(Range.START_TO_START, phrase.range) < 0) { range.setStart(wr.startContainer, wr.startOffset); range.setEnd(phrase.range.endContainer, phrase.range.endOffset); }
     else { range.setStart(phrase.range.startContainer, phrase.range.startOffset); range.setEnd(wr.endContainer, wr.endOffset); }
-    if (norm(range.toString()).length > 300) range = wr; else isPhrase = true;
+    if (norm(range.toString()).length > 400) range = wr; else isPhrase = true;
   }
   buzz(8);
   handleRange(range, contents, isPhrase ? 'phrase' : 'word');
@@ -1045,21 +1046,24 @@ Sentence containing the selection: """${c.sentence}"""
 Selected text: """${c.sel}"""
 
 Translate the SELECTED TEXT into Russian exactly as it is used here (given the book's setting, speaker and tone). If it is part of an idiom or phrasal verb in this sentence, translate the whole expression. Do not give the most common dictionary meaning if it differs from the meaning in this context.
-Return ONLY one JSON object (no markdown), ALL keys in EXACTLY this order, "" when a key does not apply:
+Return ONLY one JSON object (no markdown), ALL keys in EXACTLY this order:
 ${isPhrase(c.sel) ? `{
  "translation": "natural contextual Russian translation (this goes first!)",
- "explanation": "1 short sentence in Russian only if the phrase has an idiom or a non-obvious meaning, otherwise empty"
-` : `{
+ "phrases": [{"en":"idiom, phrasal verb, set expression, tricky or old-fashioned phrase copied from the selected text","ru":"its meaning here, in Russian"}],
+ "explanation": "1 short sentence in Russian if the grammar or the meaning of the whole selection is tricky, otherwise an empty string"
+}
+"phrases": the 1-4 most useful items worth learning for level ${lvl}, each 2-6 words, no names and no plain word combinations; an empty array if there is nothing interesting. Translate the WHOLE selected text in "translation".` : `{
  "translation": "short contextual Russian translation (this goes first!)",
- "pos": "part of speech in Russian (глагол, существительное, фразовый глагол, идиома…), or empty",
+ "pos": "part of speech in Russian (глагол, существительное, фразовый глагол, идиома…)",
  "transcription": "IPA without brackets",
- "base_form": "dictionary form if different from the selected text, otherwise empty",
- "forms": "only for an irregular verb: three forms like run – ran – run, otherwise empty",
- "style": "usage label in Russian only if the word is marked in modern English: устар., разг., книжн., груб., диал.; empty for neutral words",
+ "base_form": "dictionary form if different from the selected text, otherwise an empty string",
+ "forms": "only for an irregular verb: three forms like run – ran – run, otherwise an empty string",
+ "style": "usage label in Russian only if the word is marked in modern English: устар., разг., книжн., груб., диал.; an empty string for neutral words",
  "sentence_translation": "natural Russian translation of the sentence containing the selection",
  "examples": [{"en":"short natural example with the SAME meaning, level ${lvl}","ru":"Russian translation"}],
- "explanation": "1 short sentence in Russian only for an idiom or a rare, unexpected meaning; otherwise empty"
-`}}`;
+ "explanation": "1 short sentence in Russian ONLY if the meaning here is idiomatic, figurative, rare or differs from the usual one; otherwise an empty string"
+}
+"translation", "sentence_translation" and one item in "examples" are REQUIRED and never empty.`}`;
 }
 const cacheKey = c => (S.level || 'B1') + '|' + c.sel.toLowerCase() + '||' + c.sentence.slice(0, 220);
 async function translate(c) {
@@ -1071,13 +1075,21 @@ async function translate(c) {
     openSheet(false);
   }
   const key = cacheKey(c);
-  if (isFull(cache[key])) { paint(c, cache[key], true); return; }
+  if (isFresh(c, cache[key])) { paint(c, cache[key], true); return; }
   paint(c, {}, false);
   // случайное касание: если карточку сразу закрыли или выбрали другое слово, запрос не уходит и лимит не тратится
   await new Promise(r => setTimeout(r, 250));
   if (signal.aborted) return;
   try {
-    const res = await gemini(buildPrompt(c), signal, r => { if (signal.aborted) return; cancelAnimationFrame(paintRaf); paintRaf = requestAnimationFrame(() => { if (curCtx === c) paint(c, r, false); }); });
+    const ask = (avoid, base) => gemini(buildPrompt(c), signal, r => { if (signal.aborted) return; cancelAnimationFrame(paintRaf); paintRaf = requestAnimationFrame(() => { if (curCtx === c) paint(c, base ? Object.assign({}, r, base) : r, false); }); }, null, 25000, avoid);
+    // ответ оборвался — один раз тихо спрашиваем другую модель; уже показанное остаётся на месте
+    let res = null;
+    try { res = await ask(''); } catch (e) { if (!e.retry || signal.aborted) throw e; }
+    if (!isFull(res) && !signal.aborted) {
+      try { const two = await ask(lastModel, res); res = Object.assign({}, res, two, res && res.translation ? { translation: res.translation } : {}); } catch (e) { if (!res || e.name === 'AbortError') throw e; }
+    }
+    if (!res || !res.translation) throw new Error('Модель ответила неожиданно. Коснитесь слова ещё раз.');
+    if (isFull(res)) res._v = 2;
     if (isFull(res)) { cache[key] = res; const ks = Object.keys(cache); if (ks.length > 1500) ks.slice(0, 300).forEach(k => delete cache[k]); LS.set('lr_cache', cache); }
     if (!signal.aborted && curCtx === c) { cancelAnimationFrame(paintRaf); paint(c, res, true); }
   } catch (e) {
@@ -1122,16 +1134,21 @@ function wordInfo(c, r) {
 }
 // перевод предложения в короткой карточке; если выделено всё предложение, он совпал бы с переводом
 const sentTr = r => r.sentence_translation && r.sentence_translation !== r.translation ? h('p', { class: 'sh-st peek-only', text: r.sentence_translation }) : null;
-const moreBtn = c => h('button', { class: 'btn', onclick: () => translate(c) }, 'Загрузить подробности'); // ответ оборвался
+// интересные выражения из выделенного предложения
+const phraseList = (r, max) => {
+  const list = (Array.isArray(r.phrases) ? r.phrases : []).filter(x => x && x.en && x.ru).slice(0, max);
+  return list.length ? h('div', { class: 'sh-ph' }, h('h4', null, 'Интересные выражения'), h('ul', null, list.map(x => h('li', null, h('b', { lang: 'en', text: x.en }), h('span', { text: x.ru }))))) : null;
+};
+const trEl = r => h('div', { class: 'sh-tr' + (r.translation.length > 60 ? ' long' : ''), text: r.translation });
 function paintBubble(c, r, done, err) {
   if (!isBubble() || curCtx !== c) return;
   const sv = savedWord(c);
   const star = h('button', { class: 'star lbl' + (sv && popStar ? ' pop' : ''), 'aria-label': sv ? 'Убрать из словаря' : 'Сохранить в словарь', 'aria-pressed': String(!!sv), disabled: !done && !sv, onclick: () => toggleSave(c, r) }, ico('star', 16), sv ? 'В словаре' : 'В словарь');
   put(bubble,
-    h('div', { class: 'sh-head' }, h('h3', { lang: 'en', text: c.sel }), iconBtn('speak', 'Произнести', () => speak(c.sel), 'icobtn', 20), star, wordInfo(c, r)),
-    err ? h('div', { class: 'err', text: err.message }) : r.translation ? h('div', { class: 'sh-tr', text: r.translation }) : h('div', { class: 'muted' }, h('span', { class: 'spin' }), '  Перевожу…'),
+    h('div', { class: 'sh-head' }, h('h3', { lang: 'en', class: c.sel.length > 18 ? 'long' : '', text: c.sel }), iconBtn('speak', 'Произнести', () => speak(c.sel), 'icobtn', 20), star, wordInfo(c, r)),
+    err ? h('div', { class: 'err', text: err.message }) : r.translation ? trEl(r) : h('div', { class: 'muted' }, h('span', { class: 'spin' }), '  Перевожу…'),
     sentTr(r),
-    done && !err && !isFull(r) ? moreBtn(c) : null,
+    phraseList(r, 3),
     h('div', { class: 'bb-acts' },
       err ? (err.needKey ? h('button', { class: 'btn primary', onclick: () => openKey('Reader') }, 'Добавить ключ') : h('button', { class: 'btn', onclick: () => translate(c) }, 'Повторить')) : null,
       h('button', { class: 'btn', 'aria-label': 'Цитата', title: 'Цитата', onclick: () => addQuote(c) }, ico('quote', 18)),
@@ -1179,10 +1196,10 @@ function paint(c, r, done) {
   const sv = savedWord(c);
   const star = h('button', { class: 'star lbl' + (sv && popStar ? ' pop' : ''), 'aria-label': sv ? 'Убрать из словаря' : 'Сохранить в словарь', 'aria-pressed': String(!!sv), disabled: !done && !sv, onclick: () => toggleSave(c, r) }, ico('star', 18), sv ? 'В словаре' : 'В словарь');
   body.append(h('div', { class: 'sh-head' }, h('h3', { lang: 'en', class: c.sel.length > 18 ? 'long' : '', text: c.sel }), iconBtn('speak', 'Произнести', () => speak(c.sel)), star, wordInfo(c, r)));
-  body.append(r.translation ? h('div', { class: 'sh-tr', text: r.translation }) : h('div', { class: 'muted' }, h('span', { class: 'spin' }), '  Перевожу…'));
+  body.append(r.translation ? trEl(r) : h('div', { class: 'muted' }, h('span', { class: 'spin' }), '  Перевожу…'));
   const ex = Array.isArray(r.examples) ? r.examples.filter(x => x && x.en) : [];
   if (sentTr(r)) body.append(sentTr(r));
-  if (done && !isFull(r)) body.append(moreBtn(c));
+  const ph = phraseList(r, 4); if (ph) body.append(ph);
   if (r.explanation) body.append(h('div', { class: 'sh-sec full-only' }, h('h4', null, 'Почему так'), h('p', { text: r.explanation })));
   const bookP = h('p', { class: 'book', lang: 'en' }); const i = c.sentence.toLowerCase().indexOf(c.sel.toLowerCase());
   if (i >= 0) bookP.append(c.sentence.slice(0, i), h('mark', { text: c.sentence.slice(i, i + c.sel.length) }), c.sentence.slice(i + c.sel.length)); else bookP.textContent = c.sentence;
