@@ -170,15 +170,17 @@ body[data-theme=sepia]{--saved-ul:#5E9C84} body[data-theme=night]{--saved-ul:#4E
 .sh-head .icobtn{flex:none}
 .sh-head{display:flex;flex-wrap:wrap;align-items:center;gap:0 4px;touch-action:none}
 .sh-head h3{flex:1 1 0;min-width:0;margin:0;font-family:var(--serif);font-size:24px;font-weight:600;line-height:1.15;word-break:break-word}
-.sh-head .pos{order:5;flex:1 0 100%;font-size:14px;color:var(--muted)}
-.sh-head .pos:empty{display:none}
+.sh-head .pos{order:5;flex:1 0 100%;display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;font-size:14px;color:var(--muted)}
+.sh-head .tc{color:var(--ink2)}
+.sh-head .sty{padding:1px 7px;border-radius:6px;background:var(--hl);color:#4A3A0C;font-size:12px;font-weight:600}
+body[data-theme=night] .sh-head .sty{color:#FBF2D6}
+.sh-st{margin:0;font-size:15px;line-height:1.45;color:var(--ink2);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 .star{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--paper);color:#9A6A10;display:flex;align-items:center;justify-content:center;flex:none}
 body[data-theme=night] .star{color:#E2B652}
 .star[aria-pressed=true] svg{fill:currentColor}
 .sh-head h3.long{font-size:19px;line-height:1.25}
 .star.lbl{width:auto;padding:0 12px 0 10px;gap:6px;font-size:14px;font-weight:600;white-space:nowrap}
 .star.lbl[aria-pressed=true]{background:#F6E3A1;border-color:#E7CB6E;color:#6B4A07}
-.sh-meta{font-size:14px;color:var(--muted);margin-top:-8px}
 .sh-tr{font-size:24px;font-weight:700;color:var(--accent);line-height:1.2}
 .sh-ex{border-left:3px solid var(--line);padding-left:12px;display:flex;flex-direction:column;gap:2px}
 .sh-ex .en,.exs .en{font-family:var(--serif);font-style:italic;font-size:16px}
@@ -332,6 +334,33 @@ body[data-theme=night] .cat-ad{color:#FBF2D6}
 .bb-acts{display:flex;gap:6px;align-items:center}
 .bb-acts .btn{min-height:36px;padding:0 10px;font-size:14px}
 @keyframes bbIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* ---------- лёгкая анимация кнопок: наведение (мышь) и нажатие (палец и мышь); в тексте книги её нет ---------- */
+.btn,.icobtn,.star,.chip,.lvl,.seg button,#tabbar button{transition:background-color .15s ease,border-color .15s ease,color .15s ease,box-shadow .18s ease,transform .12s ease}
+.cover,.cat-cv{transition:box-shadow .18s ease,transform .18s ease}
+.star svg{transition:fill .18s ease}
+.btn:active:not(:disabled),.star:active:not(:disabled){transform:scale(.98)}
+.btn:not(.primary):not(.dark):active:not(:disabled){background-color:var(--soft)}
+.icobtn:active{transform:scale(.92)}
+.chip:active,.lvl:active{transform:scale(.97)}
+.blist .open:active .cover,.cont:active .cover{transform:scale(.98)}
+.star.pop svg{animation:starFill .22s ease-out}
+@keyframes starFill{from{transform:scale(.6);fill-opacity:0}to{transform:none;fill-opacity:1}}
+@media (hover:hover) and (pointer:fine){
+  .btn.primary:hover:not(:disabled):not(:active),.btn.dark:hover:not(:disabled):not(:active),#btnGoogle:hover:not(:disabled):not(:active){transform:translateY(-1px);box-shadow:0 6px 16px rgba(60,40,10,.16)}
+  .btn:not(.primary):not(.dark):hover:not(:disabled){border-color:var(--accent)}
+  .star:hover:not(:disabled){border-color:#E0BC55}
+  .star[aria-pressed=false]:hover:not(:disabled) svg{fill:#F6D978}
+  .icobtn:hover{background-color:var(--soft)}
+  .icobtn[aria-label^="Удалить"]:hover,.icobtn[aria-label^="Убрать"]:hover{color:var(--warn)!important}
+  .blist .open:hover .cover,.cont:hover .cover{transform:translateY(-2px);box-shadow:inset 3px 0 0 rgba(0,0,0,.18),0 8px 18px rgba(60,40,10,.22)}
+  .cat-it:hover .cat-cv{transform:translateY(-2px);box-shadow:0 8px 16px rgba(60,40,10,.22)}
+  .chip:not(.on):hover,.lvl:not([aria-checked=true]):hover{background-color:var(--soft)}
+  .seg button:not([aria-checked=true]):not([aria-selected=true]):hover{color:var(--accent)}
+  #tabbar button:not([aria-current=page]):hover{color:var(--ink)}
+}
+.icobtn[aria-label^="Удалить"]:active{color:var(--warn)!important}
+@media (prefers-reduced-motion:reduce){.btn:not(#nextCh),.icobtn,.star,.chip,.lvl,.cover,.cat-cv{transform:none!important}.star.pop svg{animation:none}}
 
 /* ---------- экран входа ---------- */
 .wrap.lg{padding:calc(var(--safe-t) + 8px) 8px 0;gap:18px;max-width:460px}

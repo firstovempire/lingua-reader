@@ -34,7 +34,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Запуск без связи**: `boot()` и `afterLogin()` обёрнуты в `withTimeout`; если сервер не отвечает, а `lr_uid` есть — `offlineStart()`.
 
 ## Перевод от касания до карточки
-`attachInput` (внутри iframe) → `onTap` → `wordRangeAt` → `handleRange` (предложение, абзац, хвост предыдущего абзаца, CFI) → `translate` → `gemini()` → `paint`/`paintBubble`. Второе слово в том же абзаце в течение 6 с превращает выбор во фразу.
+`attachInput` (внутри iframe) → `onTap` → `wordRangeAt` → `handleRange` (предложение, абзац, хвост предыдущего абзаца, CFI) → `translate` → `gemini()` → `paint`/`paintBubble`. Второе слово в том же абзаце в течение 3 с (`PHRASE_MS`) превращает выбор во фразу.
 
 - Ответ — поток SSE с одним JSON. `partialParse` вытаскивает поля до конца потока, поэтому порядок ключей в `buildPrompt` важен (`translation` первым); новое строковое поле добавлять и туда, и в список `partialParse`.
 - Телефон показывает шторку `#sheet` (сверху, если слово в нижней половине), компьютер — пузырь `#bubble`; поля вне iframe обрабатывает отдельный код рядом с `attachInput`.

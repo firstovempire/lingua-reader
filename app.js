@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 
-const VER = 31; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 32; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -160,6 +160,7 @@ setInterval(() => {
   readAcc += 5;
   if (readAcc >= 60) { today().read += readAcc; readAcc = 0; saveDays(); }
 }, 5000);
+document.addEventListener('touchstart', () => {}, { passive: true }); // без этого Safari не включает :active (анимация нажатия)
 document.addEventListener('pointerdown', act, true); document.addEventListener('keydown', act, true);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && readAcc) { today().read += readAcc; readAcc = 0; saveDays(); } });
 
@@ -254,7 +255,7 @@ $('#keySave').onclick = async () => {
 function partialParse(txt) {
   try { return JSON.parse(txt); } catch (e) {}
   const r = {}, un = v => { try { return JSON.parse('"' + v + '"'); } catch (e) { return v; } };
-  ['translation', 'pos', 'base_form', 'transcription', 'explanation', 'sentence_translation'].forEach(k => {
+  ['translation', 'pos', 'transcription', 'base_form', 'forms', 'style', 'sentence_translation', 'explanation'].forEach(k => {
     const m = txt.match(new RegExp('"' + k + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"')); if (m && m[1]) r[k] = un(m[1]);
   });
   const ex = [...txt.matchAll(/\{\s*"en"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"ru"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}/g)].map(m => ({ en: un(m[1]), ru: un(m[2]) }));
@@ -276,7 +277,7 @@ const addTiming = (rec, more) => { timings.push(Object.assign(rec, more)); while
 async function copyTimings() {
   // коротко, чтобы помещалось в сообщение: до первого слова / всего, модель, чем кончилось, шаги сервера
   const short = s => String(s || '').replace(/;dur=/g, ':').replace(/;desc="(?:gemini-)?([^"]*)"/g, '($1)').replace(/, /g, ' ');
-  const txt = 'v' + VER + ' ' + location.host + '\n' + timings.slice(-12).map(x => (x.first || 0) + '/' + x.total + ' ' + String(x.model || '').replace('gemini-', '') + ' ' + (x.end || '?') + (/sentence_translation/.test(x.keys || '') ? '' : ' неполный') + ' | ' + short(x.server)).join('\n')
+  const txt = 'v' + VER + ' ' + location.host + '\n' + timings.slice(-12).map(x => (x.first || 0) + '/' + x.total + ' ' + String(x.model || '').replace('gemini-', '') + ' ' + (x.end || '?') + (/_ok|sentence_translation/.test(x.keys || '') ? '' : ' неполный') + ' | ' + short(x.server)).join('\n')
     + '\n' + posLog.slice(-3).map(p => 'место ' + [p.saved, p.opened, p.after].map(v => v == null ? '-' : Math.round(v * 1000) / 10).join('>') + (p.fixed ? ' исправлено' : '') + (p.err ? ' ' + p.err : '')).join('\n');
   try { await navigator.clipboard.writeText(txt); toast('Отчёт скопирован, вставьте его в сообщение'); } catch (e) { prompt('Скопируйте отчёт', txt); }
 }
@@ -334,13 +335,14 @@ async function readStream(r, onPartial, arm) {
     onPartial && onPartial(partialParse(acc.replace(/^\s*```json\s*/, '')));
   }
   const txt = acc.replace(/^\s*```json\s*|```\s*$/g, '').trim();
-  try { return JSON.parse(txt); } catch (e) {}
-  const a = txt.indexOf('{'), b = txt.lastIndexOf('}'); if (a >= 0 && b > a) { try { return JSON.parse(txt.slice(a, b + 1)); } catch (e) {} }
+  const whole = s => { let o = JSON.parse(s); if (Array.isArray(o)) o = o[0]; if (o && o.translation) o._ok = 1; return o; };
+  try { return whole(txt); } catch (e) {}
+  const a = txt.indexOf('{'), b = txt.lastIndexOf('}'); if (a >= 0 && b > a) { try { return whole(txt.slice(a, b + 1)); } catch (e) {} }
   const p = partialParse(txt); if (p.translation) return p;
   throw new Error(streamErr ? 'Модель Google сейчас перегружена. Коснитесь слова ещё раз.' : 'Модель ответила неожиданно. Коснитесь слова ещё раз.');
 }
-// ответ дошёл до конца: последний ключ промпта на месте (обрывки не кэшируем)
-const isFull = r => !!r && !!r.translation && r.sentence_translation != null;
+// ответ дошёл до конца (обрывки не кэшируем); у записей старого формата вместо пометки есть перевод предложения
+const isFull = r => !!r && !!r.translation && (!!r._ok || (r.sentence_translation != null && r.examples != null));
 
 /* ================= библиотека ================= */
 async function readMeta(buf, fallback) {
@@ -991,6 +993,8 @@ function handleRange(range, contents, kind, cfiKnown) {
   if (kind === 'word') showHint(); else hideHint();
   translate(curCtx);
 }
+// длинное выделение: нужен только перевод и пояснение, без транскрипции, форм и примеров
+const isPhrase = s => s.split(/\s+/).length > 3;
 function buildPrompt(c) {
   const lvl = S.level || 'B1';
   return `You help a Russian-speaking learner (English level ${lvl}) read an English book and understand a selected word or phrase in context.
@@ -1000,16 +1004,21 @@ Sentence containing the selection: """${c.sentence}"""
 Selected text: """${c.sel}"""
 
 Translate the SELECTED TEXT into Russian exactly as it is used here (given the book's setting, speaker and tone). If it is part of an idiom or phrasal verb in this sentence, translate the whole expression. Do not give the most common dictionary meaning if it differs from the meaning in this context.
-Return ONLY one JSON object (no markdown), keys in EXACTLY this order:
-{
+Return ONLY one JSON object (no markdown), ALL keys in EXACTLY this order, "" when a key does not apply:
+${isPhrase(c.sel) ? `{
+ "translation": "natural contextual Russian translation (this goes first!)",
+ "explanation": "1 short sentence in Russian only if the phrase has an idiom or a non-obvious meaning, otherwise empty"
+` : `{
  "translation": "short contextual Russian translation (this goes first!)",
  "pos": "part of speech in Russian (глагол, существительное, фразовый глагол, идиома…), or empty",
- "examples": [{"en":"short natural example with the SAME meaning, level ${lvl}","ru":"Russian translation"},{"en":"another example, different situation","ru":"Russian translation"}],
- "base_form": "dictionary form if different, or empty",
- "transcription": "IPA for a single word or short phrase, otherwise empty",
- "explanation": "1-2 short sentences in Russian: why this meaning here; mention another common meaning only if it could confuse",
- "sentence_translation": "natural Russian translation of the sentence containing the selection"
-}`;
+ "transcription": "IPA without brackets",
+ "base_form": "dictionary form if different from the selected text, otherwise empty",
+ "forms": "only for an irregular verb: three forms like run – ran – run, otherwise empty",
+ "style": "usage label in Russian only if the word is marked in modern English: устар., разг., книжн., груб., диал.; empty for neutral words",
+ "sentence_translation": "natural Russian translation of the sentence containing the selection",
+ "examples": [{"en":"short natural example with the SAME meaning, level ${lvl}","ru":"Russian translation"}],
+ "explanation": "1 short sentence in Russian only for an idiom or a rare, unexpected meaning; otherwise empty"
+`}}`;
 }
 const cacheKey = c => (S.level || 'B1') + '|' + c.sel.toLowerCase() + '||' + c.sentence.slice(0, 220);
 async function translate(c) {
@@ -1060,16 +1069,27 @@ function closeBubble(keepSel) {
   bubble.classList.remove('on'); bubble.setAttribute('aria-hidden', 'true');
   if (!keepSel && !isSheetOpen()) { if (aborter) aborter.abort(); phrase = null; try { if (selCfi && rendition) rendition.annotations.remove(selCfi, 'highlight'); } catch (e) {} selCfi = null; }
 }
+// строка под словом: транскрипция · часть речи · от run · run – ran – run, и пометка стиля
+function wordInfo(c, r) {
+  const str = v => typeof v === 'string' ? v.trim() : '';
+  const tc = str(r.transcription).replace(/^[\/\[]+|[\/\]]+$/g, ''), base = str(r.base_form), forms = str(r.forms), style = str(r.style);
+  const same = base.toLowerCase() === c.sel.toLowerCase();
+  const text = [str(r.pos), base && !same ? 'от ' + base : '', /[–—-]/.test(forms) ? forms : ''].filter(Boolean).join(' · ');
+  if (!tc && !text && !style) return null;
+  return h('span', { class: 'pos' }, tc ? h('span', { class: 'tc', lang: 'en', text: '/' + tc + '/' }) : null,
+    style && style.length < 24 && !/нейтр|обычн|нет/i.test(style) ? h('span', { class: 'sty', text: style }) : null, text ? h('span', { text }) : null);
+}
+// перевод предложения в короткой карточке; если выделено всё предложение, он совпал бы с переводом
+const sentTr = r => r.sentence_translation && r.sentence_translation !== r.translation ? h('p', { class: 'sh-st peek-only', text: r.sentence_translation }) : null;
 const moreBtn = c => h('button', { class: 'btn', onclick: () => translate(c) }, 'Загрузить подробности'); // ответ оборвался
 function paintBubble(c, r, done, err) {
   if (!isBubble() || curCtx !== c) return;
   const sv = savedWord(c);
-  const star = h('button', { class: 'star lbl', 'aria-label': sv ? 'Убрать из словаря' : 'Сохранить в словарь', 'aria-pressed': String(!!sv), disabled: !done && !sv, onclick: () => toggleSave(c, r) }, ico('star', 16), sv ? 'В словаре' : 'В словарь');
-  const ex = Array.isArray(r.examples) ? r.examples.filter(x => x && x.en) : [];
+  const star = h('button', { class: 'star lbl' + (sv && popStar ? ' pop' : ''), 'aria-label': sv ? 'Убрать из словаря' : 'Сохранить в словарь', 'aria-pressed': String(!!sv), disabled: !done && !sv, onclick: () => toggleSave(c, r) }, ico('star', 16), sv ? 'В словаре' : 'В словарь');
   put(bubble,
-    h('div', { class: 'sh-head' }, h('h3', { lang: 'en', text: c.sel }), iconBtn('speak', 'Произнести', () => speak(c.sel), 'icobtn', 20), h('span', { class: 'pos', text: r.pos || '' }), star),
+    h('div', { class: 'sh-head' }, h('h3', { lang: 'en', text: c.sel }), iconBtn('speak', 'Произнести', () => speak(c.sel), 'icobtn', 20), star, wordInfo(c, r)),
     err ? h('div', { class: 'err', text: err.message }) : r.translation ? h('div', { class: 'sh-tr', text: r.translation }) : h('div', { class: 'muted' }, h('span', { class: 'spin' }), '  Перевожу…'),
-    ex[0] ? h('div', { class: 'sh-ex' }, h('div', { class: 'en', lang: 'en', text: ex[0].en }), h('div', { class: 'ru', text: ex[0].ru || '' })) : null,
+    sentTr(r),
     done && !err && !isFull(r) ? moreBtn(c) : null,
     h('div', { class: 'bb-acts' },
       err ? (err.needKey ? h('button', { class: 'btn primary', onclick: () => openKey('Reader') }, 'Добавить ключ') : h('button', { class: 'btn', onclick: () => translate(c) }, 'Повторить')) : null,
@@ -1116,19 +1136,17 @@ function savedWord(c) { return words.find(w => w.bookId === (curBook && curBook.
 function paint(c, r, done) {
   const body = $('#sheetBody'); const top = body.scrollTop; body.innerHTML = '';
   const sv = savedWord(c);
-  const star = h('button', { class: 'star lbl', 'aria-label': sv ? 'Убрать из словаря' : 'Сохранить в словарь', 'aria-pressed': String(!!sv), disabled: !done && !sv, onclick: () => toggleSave(c, r) }, ico('star', 18), sv ? 'В словаре' : 'В словарь');
-  body.append(h('div', { class: 'sh-head' }, h('h3', { lang: 'en', class: c.sel.length > 18 ? 'long' : '', text: c.sel }), iconBtn('speak', 'Произнести', () => speak(c.sel)), h('span', { class: 'pos', text: r.pos || '' }), star));
-  const meta = [r.transcription, r.base_form && r.base_form.toLowerCase() !== c.sel.toLowerCase() ? 'словарная форма: ' + r.base_form : ''].filter(Boolean).join(' · ');
-  if (meta) body.append(h('div', { class: 'sh-meta full-only', text: meta }));
+  const star = h('button', { class: 'star lbl' + (sv && popStar ? ' pop' : ''), 'aria-label': sv ? 'Убрать из словаря' : 'Сохранить в словарь', 'aria-pressed': String(!!sv), disabled: !done && !sv, onclick: () => toggleSave(c, r) }, ico('star', 18), sv ? 'В словаре' : 'В словарь');
+  body.append(h('div', { class: 'sh-head' }, h('h3', { lang: 'en', class: c.sel.length > 18 ? 'long' : '', text: c.sel }), iconBtn('speak', 'Произнести', () => speak(c.sel)), star, wordInfo(c, r)));
   body.append(r.translation ? h('div', { class: 'sh-tr', text: r.translation }) : h('div', { class: 'muted' }, h('span', { class: 'spin' }), '  Перевожу…'));
   const ex = Array.isArray(r.examples) ? r.examples.filter(x => x && x.en) : [];
-  if (ex[0]) body.append(h('div', { class: 'sh-ex peek-only' }, h('div', { class: 'en', lang: 'en', text: ex[0].en }), h('div', { class: 'ru', text: ex[0].ru || '' })));
+  if (sentTr(r)) body.append(sentTr(r));
   if (done && !isFull(r)) body.append(moreBtn(c));
   if (r.explanation) body.append(h('div', { class: 'sh-sec full-only' }, h('h4', null, 'Почему так'), h('p', { text: r.explanation })));
   const bookP = h('p', { class: 'book', lang: 'en' }); const i = c.sentence.toLowerCase().indexOf(c.sel.toLowerCase());
   if (i >= 0) bookP.append(c.sentence.slice(0, i), h('mark', { text: c.sentence.slice(i, i + c.sel.length) }), c.sentence.slice(i + c.sel.length)); else bookP.textContent = c.sentence;
   body.append(h('div', { class: 'sh-sec full-only' }, h('h4', null, 'В книге'), bookP, r.sentence_translation ? h('p', { class: 'muted', style: 'font-size:14px;margin-top:4px', text: r.sentence_translation }) : null));
-  if (ex.length) body.append(h('div', { class: 'sh-sec full-only' }, h('h4', null, 'Примеры'), h('div', { class: 'exs' }, ex.slice(0, 2).map(x => h('div', { class: 'row' }, h('div', null, h('div', { class: 'en', lang: 'en', text: x.en }), h('div', { class: 'ru', text: x.ru || '' })), iconBtn('speak', 'Произнести пример', () => speak(x.en), 'icobtn', 18))))));
+  if (ex.length) body.append(h('div', { class: 'sh-sec full-only' }, h('h4', null, 'Пример'), h('div', { class: 'exs' }, ex.slice(0, 1).map(x => h('div', { class: 'row' }, h('div', null, h('div', { class: 'en', lang: 'en', text: x.en }), h('div', { class: 'ru', text: x.ru || '' })), iconBtn('speak', 'Произнести пример', () => speak(x.en), 'icobtn', 18))))));
   body.append(h('div', { class: 'sh-acts peek-only' },
     h('button', { class: 'btn', onclick: () => addQuote(c) }, ico('quote', 18), 'Цитата'),
     h('button', { class: 'btn', onclick: () => openNote(c) }, ico('note', 18), 'Заметка'),
@@ -1140,11 +1158,12 @@ function paint(c, r, done) {
   body.scrollTop = top; placeHint();
   paintBubble(c, r, done);
 }
+let popStar = false;
 function toggleSave(c, r) {
-  const sv = savedWord(c);
+  const sv = savedWord(c); popStar = !sv;
   if (sv) { words = words.filter(w => w !== sv); toast('Убрано из словаря'); }
-  else { words.unshift({ id: 'w' + uid(), bookId: curBook.id, cfi: c.cfi, w: c.sel, tr: r.translation || '', pos: r.pos || '', tc: r.transcription || '', base: r.base_form || '', exp: r.explanation || '', ex: (r.examples || []).slice(0, 2), s: c.sentence, st: r.sentence_translation || '', chapter: c.chapter, t: Date.now(), box: 0, due: Date.now() }); buzz(12); toast('Добавлено в словарь'); }
-  saveWords(); updBadge(); paint(c, r, true);
+  else { words.unshift({ id: 'w' + uid(), bookId: curBook.id, cfi: c.cfi, w: c.sel, tr: r.translation || '', pos: r.pos || '', tc: r.transcription || '', base: r.base_form || '', exp: r.explanation || '', ex: (Array.isArray(r.examples) ? r.examples : []).slice(0, 1), s: c.sentence, st: r.sentence_translation || '', chapter: c.chapter, t: Date.now(), box: 0, due: Date.now() }); buzz(12); toast('Добавлено в словарь'); }
+  saveWords(); updBadge(); paint(c, r, true); popStar = false;
   try { rendition.getContents().forEach(ct => underlineSaved(ct)); } catch (e) {}
 }
 
