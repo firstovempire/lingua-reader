@@ -5,6 +5,8 @@
 (() => {
 'use strict';
 
+const VER = 26; // как в sw.js (lingua-vNN), видно в профиле
+
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -269,11 +271,11 @@ function apiError(status, data) {
   return m;
 }
 const NET_HINT = 'Google не отвечает. Похоже, VPN пропускает сайт Gemini, но не адрес API generativelanguage.googleapis.com. Включите в VPN весь трафик (глобальный режим) или добавьте домен googleapis.com и повторите.';
-const timings = LS.get('lr_timings', []); // замеры последних переводов: Профиль → Замеры перевода
+const timings = LS.get('lr_timings', []); // замеры последних переводов: Профиль → Отчёт для разработчика
 const addTiming = (rec, more) => { timings.push(Object.assign(rec, more)); while (timings.length > 30) timings.shift(); LS.set('lr_timings', timings); };
 async function copyTimings() {
-  const txt = JSON.stringify({ site: location.host, timings });
-  try { await navigator.clipboard.writeText(txt); toast('Замеры скопированы'); } catch (e) { prompt('Скопируйте замеры', txt); }
+  const txt = JSON.stringify({ site: location.host, ver: VER, timings, posLog });
+  try { await navigator.clipboard.writeText(txt); toast('Отчёт скопирован, вставьте его в сообщение'); } catch (e) { prompt('Скопируйте отчёт', txt); }
 }
 async function gemini(prompt, outerSignal, onPartial, keyOverride, timeoutMs = 25000) {
   const key = keyOverride || getKey();
@@ -657,7 +659,8 @@ function renderProfile() {
     row('Ключ перевода', k ? 'Gemini ••••' + k.slice(-4) : 'не задан', () => openKey('Profile')),
     row('Модель', S.model + (lastModel && lastModel !== S.model ? ' (сейчас: ' + lastModel + ')' : ''), () => { const m = prompt('Название модели Gemini', S.model); if (m && m.trim()) { S.model = m.trim(); saveS(); renderProfile(); } }),
     CLOUD && lastRegion ? h('li', null, h('span', { style: 'flex:1;font-size:15px;min-height:44px;display:flex;align-items:center', text: 'Сервер перевода' }), h('span', { class: 'muted', style: 'font-size:14px;padding-right:10px', text: (REGION_NAMES[lastRegion] || lastRegion) })) : null,
-    timings.length ? row('Замеры перевода', 'скопировать', copyTimings) : null,
+    row('Отчёт для разработчика', 'скопировать', copyTimings),
+    row('Версия', String(VER), () => toast('Версия ' + VER)),
     row('Очистить кэш переводов', Object.keys(cache).length + ' шт.', () => { if (confirm('Очистить сохранённые переводы? Слова в словаре останутся.')) { for (const x in cache) delete cache[x]; LS.set('lr_cache', {}); renderProfile(); } }),
     CLOUD && user ? row('Выйти', '', async () => { if (!confirm('Выйти из аккаунта на этом устройстве?')) return; await flush(); await sb.auth.signOut(); }) : null
   );
@@ -666,13 +669,19 @@ function renderProfile() {
 }
 
 /* ================= читалка ================= */
+// пока hold не снят, место чтения не перезаписывается: книга только открывается и могла встать не туда
+let hold = null, locReady = false;
+const posLog = LS.get('lr_poslog', []); // как открывались книги, вместе с замерами
+const addPos = x => { posLog.push(x); while (posLog.length > 10) posLog.shift(); LS.set('lr_poslog', posLog); };
 let book = null, rendition = null, curBook = null, navToc = [], spineChars = null, lastLoc = null, progT = null;
 async function openBook(b, atCfi) {
   curBook = b; show('Reader');
   $('#loading').style.display = 'flex'; $('#rTitle').textContent = b.title;
   $('#miniCh').textContent = b.title; $('#miniPct').textContent = ''; $('#bCh').textContent = ''; $('#bPct').textContent = '';
   try { if (rendition) rendition.destroy(); if (book) book.destroy(); } catch (e) {}
-  rendition = null; book = null; spineChars = null; navToc = []; selCfi = null;
+  rendition = null; book = null; spineChars = null; navToc = []; selCfi = null; lastLoc = null; locReady = false;
+  clearTimeout(progT); progT = null;
+  const holding = hold = !atCfi && b.cfi ? { pct: b.pct || 0, err: '' } : null;
   let buf; try { buf = await files.get(b.id); } catch (e) {}
   if (!buf && b.cat) {
     $('#loading').lastChild.textContent = 'Скачиваю книгу…';
@@ -706,7 +715,7 @@ async function openBook(b, atCfi) {
   applyReader();
   let start = atCfi || b.cfi || undefined;
   if (!start && b.cat) { try { await bk.loaded.spine; const it = bk.spine.spineItems.find(x => !/(titlepage|imprint|halftitle)/i.test(x.href || '')); if (it) start = it.href; } catch (e) {} } // книги каталога: сразу к тексту, без служебных страниц
-  try { await rendition.display(start); } catch (e) { try { await rendition.display(); } catch (e2) {} }
+  try { await rendition.display(start); } catch (e) { if (holding) holding.err = String(e && e.message || e).slice(0, 80); try { await rendition.display(); } catch (e2) {} }
   // шрифт и размер меняют раскладку уже после показа, и страница съезжает назад: ждём их и встаём на место ещё раз
   if (start && /^epubcfi/.test(start)) {
     try {
@@ -722,6 +731,21 @@ async function openBook(b, atCfi) {
   if (!isDesk()) { const n = LS.get('lr_taphint', 0); toggleChrome(true); setTimeout(() => { if (current === 'Reader') toggleChrome(false); }, 2200);
     if (n < 3) { LS.set('lr_taphint', n + 1); tapHintT = setTimeout(() => { $('#tapHint').classList.add('on'); tapHintT = setTimeout(() => $('#tapHint').classList.remove('on'), 2600); }, 2400); } }
   rendition.on('relocated', onRelocated);
+  if (rendition.location && rendition.location.start) onRelocated(rendition.location);
+  if (holding) setTimeout(() => { if (hold === holding && !holding.err) { hold = null; if (book === bk && rendition && rendition.location) onRelocated(rendition.location); } }, 6000); // страницы считаются долго — не ждём
+  // место не нашлось — вернуться по проценту, когда страницы посчитаны; потом снова сохраняем
+  const settle = async () => {
+    if (!holding || hold !== holding || book !== bk) return;
+    const now = () => { try { return locReady ? bk.locations.percentageFromCfi(rendition.location.start.cfi) : null; } catch (e) { return null; } };
+    const was = now(); let fixed = false;
+    if (was != null && was < holding.pct - 0.02) {
+      const cfi = bk.locations.cfiFromPercentage(holding.pct);
+      if (cfi && cfi !== -1) { try { await rendition.display(cfi); await new Promise(r => setTimeout(r, 300)); fixed = true; } catch (e) {} }
+    }
+    if (book !== bk || hold !== holding) return;
+    hold = null; addPos({ saved: holding.pct, opened: was, after: now(), fixed, err: holding.err, flow: S.flow, cat: !!b.cat });
+    if (rendition.location && rendition.location.start) onRelocated(rendition.location);
+  };
   if (scrollMode) watchChapterEnd();
   rendition.on('rendered', (section, view) => { try { underlineSaved(view.contents); } catch (e) {} });
   rendition.on('selected', onSelectedRange);
@@ -733,8 +757,8 @@ async function openBook(b, atCfi) {
     const LK = b.id + '#loc1000'; let saved = null; try { saved = await files.get(LK); } catch (e) {}
     if (saved) { try { bk.locations.load(saved); } catch (e) { saved = null; } }
     if (!saved || !bk.locations.length()) { await bk.locations.generate(1000); try { files.put(LK, bk.locations.save()); } catch (e) {} } // один раз на книгу
-    if (book !== bk) return; buildSpineChars(); updProgress(lastLoc);
-  }).catch(() => {});
+    if (book !== bk) return; locReady = true; buildSpineChars(); updProgress(lastLoc); await settle();
+  }).catch(() => { if (hold === holding) hold = null; });
   if (atCfi) setTimeout(() => { try { rendition.annotations.highlight(atCfi, {}, null, 'lr-flash', { fill: THEME[S.theme].sel, 'fill-opacity': '0.8' }); setTimeout(() => { try { rendition.annotations.remove(atCfi, 'highlight'); } catch (e) {} }, 1600); } catch (e) {} }, 400);
 }
 // режим прокрутки: глава — одна лента; в конце главы появляется кнопка «Следующая глава»
@@ -768,7 +792,7 @@ function updProgress(loc) {
   if (!loc || !book) return;
   let pct = null, left = null;
   try {
-    if (book.locations.length()) {
+    if (locReady && book.locations.length()) { // недосчитанные страницы дают неверный процент
       pct = book.locations.percentageFromCfi(loc.start.cfi);
       const i = book.locations.locationFromCfi(loc.start.cfi), arr = spineChars && spineChars[loc.start.index];
       if (arr && arr.length) { const remain = Math.max(0, arr[arr.length - 1] - i + 1); left = Math.max(1, Math.round(remain * 1000 / 5.6 / 180)); }
@@ -783,12 +807,21 @@ function updProgress(loc) {
   parts.push(P + ' книги');
   $('#miniPct').textContent = P; $('#bPct').textContent = parts.join(' · '); $('#miniBar i').style.width = (pct * 100).toFixed(1) + '%';
   if (!scrubbing) $('#scrub').value = Math.round(pct * 1000);
-  if (curBook) { curBook.pct = pct; curBook.left = left; }
+  if (curBook && !hold) { curBook.pct = pct; curBook.left = left; }
 }
+// место чтения пишем в книгу из books (по id: синхронизация могла подменить объект) и раньше любого интерфейса
+function savePos(loc) {
+  if (!curBook || hold || !loc || !loc.start || !loc.start.cfi) return;
+  const live = books.find(x => x.id === curBook.id); if (live) curBook = live;
+  curBook.cfi = loc.start.cfi; curBook.lastRead = Date.now();
+  if (locReady && book) { try { const p = book.locations.percentageFromCfi(loc.start.cfi); if (p != null) curBook.pct = p; } catch (e) {} }
+  clearTimeout(progT); progT = setTimeout(() => { progT = null; saveBooks(); }, 600);
+}
+// читатель листает сам — место снова сохраняется (кроме случая, когда книга открылась не туда и мы его ещё ищем)
+const userMoved = () => { if (hold && !hold.err) hold = null; };
 function onRelocated(loc) {
-  act(); if (isBubble()) closeBubble();
-  lastLoc = loc; markChapter(loc); updProgress(loc); updMarkBtn();
-  if (curBook) { curBook.cfi = loc.start.cfi; curBook.chapter = curChapter; curBook.lastRead = Date.now(); clearTimeout(progT); progT = setTimeout(() => { progT = null; saveBooks(); }, 600); }
+  lastLoc = loc; savePos(loc);
+  try { act(); if (isBubble()) closeBubble(); markChapter(loc); if (curBook && !hold) curBook.chapter = curChapter; updProgress(loc); updMarkBtn(); } catch (e) { console.warn('relocated', e); }
 }
 function applyReader() {
   applyTheme();
@@ -810,12 +843,13 @@ new ResizeObserver(() => { clearTimeout(window.__rz); window.__rz = setTimeout((
 
 /* --- верхняя / нижняя панели --- */
 const toggleChrome = force => { const on = force != null ? force : !document.body.classList.contains('chrome'); document.body.classList.toggle('chrome', on); };
-$('#rBack').onclick = () => { const r = rendition, bk = book; rendition = null; book = null; saveBooks(); show('Lib'); setTimeout(() => { try { r && r.destroy(); } catch (e) {} try { bk && bk.destroy(); } catch (e) {} }, 50); };
+$('#rBack').onclick = () => { const r = rendition, bk = book; if (r && r.location) savePos(r.location); hold = null; clearTimeout(progT); progT = null; rendition = null; book = null; saveBooks(); show('Lib'); setTimeout(() => { try { r && r.destroy(); } catch (e) {} try { bk && bk.destroy(); } catch (e) {} }, 50); };
 let scrubbing = false;
 $('#scrub').oninput = () => { scrubbing = true; const p = $('#scrub').value / 1000; $('#bPct').textContent = Math.round(p * 100) + '%'; };
-$('#scrub').onchange = () => { scrubbing = false; if (!book || !book.locations.length()) { toast('Считаю страницы, секунду…'); return; } const cfi = book.locations.cfiFromPercentage($('#scrub').value / 1000); if (cfi) rendition.display(cfi); };
+$('#scrub').onchange = () => { scrubbing = false; if (!book || !locReady) { toast('Считаю страницы, секунду…'); return; } hold = null; const cfi = book.locations.cfiFromPercentage($('#scrub').value / 1000); if (cfi) rendition.display(cfi); };
 function goChapter(d) {
   if (!book || !lastLoc) return;
+  hold = null;
   if (d < 0) { const s = book.spine.get(lastLoc.start.index); const pg = lastLoc.start.displayed && lastLoc.start.displayed.page; if (s && pg > 1) { rendition.display(s.href); return; } }
   const s = book.spine.get(lastLoc.start.index + d); if (s) rendition.display(s.href); else toast(d > 0 ? 'Это последняя глава' : 'Это начало книги');
 }
@@ -848,7 +882,9 @@ function attachInput(contents) {
 const p_isTouch = () => matchMedia('(pointer:coarse)').matches;
 // касания по полям вокруг текста (вне iframe книги): края листают, середина — меню, свайп — листает
 (() => {
-  const scr = $('#sReader'); let p0 = null;
+  const scr = $('#sReader'); let p0 = null, hadCard = false;
+  // карточка перевода закрывается уже на нажатии, поэтому запоминаем до этого: такое касание только закрывает, не листает
+  document.addEventListener('pointerdown', () => { hadCard = isBubble() || isSheetOpen(); }, true);
   const skip = t => t.closest('button, a, input, #rtop, #rbottom, #sheet, #bubble, #modal, iframe');
   const down = (t, x, y) => { p0 = skip(t) ? null : { x, y, t: Date.now() }; };
   const up = (x, y) => {
@@ -856,27 +892,29 @@ const p_isTouch = () => matchMedia('(pointer:coarse)').matches;
     if (S.flow !== 'scroll' && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - p.t < 700) { killTapHint(); closeSheet(); dx < 0 ? next() : prev(); return; }
     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return;
     killTapHint();
-    if (isBubble()) { closeBubble(); return; } if (isSheetOpen()) { closeSheet(); return; }
-    const w = window.innerWidth; if (S.flow !== 'scroll' && x < w * 0.3) prev(); else if (S.flow !== 'scroll' && x > w * 0.7) next(); else toggleChrome(!document.body.classList.contains('chrome'));
+    if (isBubble()) { closeBubble(); return; } if (isSheetOpen()) { closeSheet(); return; } if (hadCard) return;
+    const side = edgeSide(x); if (side < 0) prev(); else if (side > 0) next(); else toggleChrome(!document.body.classList.contains('chrome'));
   };
   scr.addEventListener('touchstart', e => { const t = e.changedTouches[0]; down(e.target, t.clientX, t.clientY); }, { passive: true });
   scr.addEventListener('touchend', e => { const t = e.changedTouches[0]; up(t.clientX, t.clientY); });
   scr.addEventListener('pointerdown', e => { if (e.pointerType !== 'touch') down(e.target, e.clientX, e.clientY); });
   scr.addEventListener('pointerup', e => { if (e.pointerType !== 'touch') up(e.clientX, e.clientY); });
 })();
-const next = () => { buzz(4); rendition && rendition.next(); }, prev = () => { buzz(4); rendition && rendition.prev(); };
+const next = () => { buzz(4); userMoved(); rendition && rendition.next(); }, prev = () => { buzz(4); userMoved(); rendition && rendition.prev(); };
+// узкие полосы у самых краёв экрана листают: -1 назад, 1 вперёд, 0 — не край
+function edgeSide(x) {
+  if (S.flow === 'scroll') return 0;
+  const w = window.innerWidth, z = isDesk() ? Math.min(120, w * 0.08) : Math.min(48, Math.max(36, w * 0.1));
+  return x < z ? -1 : x > w - z ? 1 : 0;
+}
 let tapHintT = null;
 function killTapHint() { clearTimeout(tapHintT); $('#tapHint').classList.remove('on'); }
 function onTap(e, contents) {
   killTapHint();
-  const fr = contents.document.defaultView.frameElement; const vr = $('#viewer').getBoundingClientRect(); const fb = fr.getBoundingClientRect();
-  const x = fb.left + e.clientX - vr.left, w = vr.width;
-  const edge = Math.max(44, w * 0.12);
-  const paged = S.flow !== 'scroll';
-  if (paged && x < edge && !isSheetOpen() && !isBubble()) { prev(); return; }
-  if (paged && x > w - edge && !isSheetOpen() && !isBubble()) { next(); return; }
+  const fb = contents.document.defaultView.frameElement.getBoundingClientRect();
+  // сначала слово (в том числе у края строки), потом закрытие карточки, и только потом листание по краю экрана
   const wr = wordRangeAt(contents.document, e.clientX, e.clientY);
-  if (!wr) { if (isBubble()) { closeBubble(); return; } if (isSheetOpen()) { closeSheet(); return; } if (document.body.classList.contains('chrome')) toggleChrome(false); else toggleChrome(true); return; }
+  if (!wr) { if (isBubble()) { closeBubble(); return; } if (isSheetOpen()) { closeSheet(); return; } const side = edgeSide(fb.left + e.clientX); if (side) { side < 0 ? prev() : next(); return; } if (document.body.classList.contains('chrome')) toggleChrome(false); else toggleChrome(true); return; }
   if ((isSheetOpen() || isBubble()) && curCtx && curCtx.doc === contents.document && curCtx.range && overlaps(curCtx.range, wr)) { phrase = null; closeSheet(); closeBubble(); return; } // второй тап по выделенному — закрыть
   toggleChrome(false);
   let range = wr, isPhrase = false;
@@ -1198,7 +1236,7 @@ let tocTab = 'toc';
 function renderToc() {
   const tabs = h('div', { class: 'seg', role: 'tablist' }, [['toc', 'Главы'], ['marks', 'Закладки'], ['notes', 'Заметки']].map(([v, t]) => h('button', { role: 'tab', 'aria-selected': String(tocTab === v), onclick: () => { tocTab = v; renderToc(); } }, t)));
   const kids = [tabs];
-  const go = cfi => { closeModal(); toggleChrome(false); rendition.display(cfi); };
+  const go = cfi => { hold = null; closeModal(); toggleChrome(false); rendition.display(cfi); };
   if (tocTab === 'toc') {
     if (!navToc.length) kids.push(h('div', { class: 'empty', text: 'В этой книге нет оглавления' }));
     else kids.push(h('ul', { class: 'tlist' }, navToc.map(t => h('li', null, h('button', { onclick: () => go(t.href), style: `padding-left:${2 + t.depth * 16}px` }, h('span', { class: t.label === curChapter ? 'cur' : '', style: 'flex:1;font-size:16px', text: t.label }), t.label === curChapter ? h('small', { text: 'Вы здесь' }) : null)))));
@@ -1231,7 +1269,7 @@ $('#rSearch').onclick = () => {
       try { await item.load(book.load.bind(book)); const res = item.find(q); item.unload();
         res.slice(0, 40).forEach(r => { if (found >= 150) return; found++; const ex = norm(r.excerpt); const i = ex.toLowerCase().indexOf(q.toLowerCase());
           const sp = h('span', { class: 'ex', lang: 'en' }); if (i >= 0) sp.append(ex.slice(0, i), h('mark', { text: ex.slice(i, i + q.length) }), ex.slice(i + q.length)); else sp.textContent = ex;
-          ul.append(h('li', null, h('button', { onclick: () => { closeModal(); rendition.display(r.cfi); } }, h('span', { class: 'sub' }, sp)))); });
+          ul.append(h('li', null, h('button', { onclick: () => { hold = null; closeModal(); rendition.display(r.cfi); } }, h('span', { class: 'sub' }, sp)))); });
       } catch (e) {}
       status.textContent = found ? 'Найдено: ' + found + '…' : 'Ищу…';
     }
