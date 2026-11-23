@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 
-const VER = 30; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 31; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
