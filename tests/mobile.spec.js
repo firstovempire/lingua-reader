@@ -1,0 +1,88 @@
+// Вёрстка на телефонах: с учётом панелей браузера видимая высота ~550–740 px.
+// Проверяем, что главное помещается, ничего не уезжает вбок и не прячется под нижнее меню.
+const { test, expect } = require('@playwright/test');
+const { FakeDB, attach } = require('./fake-supabase');
+
+const SIZES = [{ width: 375, height: 553 }, { width: 390, height: 664 }, { width: 430, height: 740 }];
+const T0 = Date.UTC(2026, 10, 20);
+const SEED = {
+  lr_s: { level: 'B1' },
+  lr_books: [{ id: 'cat-jane-austen_pride-and-prejudice', cat: 'jane-austen_pride-and-prejudice', title: 'Pride and Prejudice', author: 'Jane Austen', cover: 'catalog/covers/jane-austen_pride-and-prejudice.jpg', added: T0, pct: 0.23, lastRead: T0 + 1, up: true }],
+  lr_words: [{ id: 'w1', bookId: 'cat-jane-austen_pride-and-prejudice', w: 'countenance', tr: 'выражение лица', s: 'Her countenance was a picture of calm.', t: T0, box: 0, due: T0 }],
+};
+
+async function phone(browser, size, { loggedIn = true, seed = SEED } = {}) {
+  const db = new FakeDB();
+  const context = await browser.newContext({ viewport: size, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+  await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+  await attach(context, db, { loggedIn });
+  await context.addInitScript(seed => { if (localStorage.getItem('__seeded')) return; localStorage.setItem('__seeded', '1'); for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, JSON.stringify(v)); }, seed);
+  const page = await context.newPage();
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  return { page, db, errors };
+}
+const box = (page, sel) => page.locator(sel).first().boundingBox();
+async function noSideScroll(page) {
+  const over = await page.evaluate(() => [...document.querySelectorAll('.screen.on, .screen.on .scroll')].filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.id || e.className));
+  expect(over, 'что-то уезжает вбок').toEqual([]);
+}
+
+for (const size of SIZES) {
+  const name = size.width + '×' + size.height;
+
+  test('вход помещается целиком ' + name, async ({ browser }, info) => {
+    const { page, errors } = await phone(browser, size, { loggedIn: false });
+    await page.goto('/');
+    await expect(page.locator('#sLogin')).toHaveClass(/on/);
+    const b = await box(page, '#btnGoogle');
+    expect(b.y + b.height, 'кнопка входа видна').toBeLessThanOrEqual(size.height);
+    const last = await box(page, '.lg-rep');
+    expect(last.y + last.height, 'третий шаг не под кнопкой').toBeLessThanOrEqual(b.y + 2);
+    await noSideScroll(page);
+    await info.attach('вход ' + name, { body: await page.screenshot(), contentType: 'image/png' });
+    expect(errors).toEqual([]);
+  });
+
+  test('вкладки ' + name, async ({ browser }, info) => {
+    const { page, errors } = await phone(browser, size);
+    await page.goto('/');
+    await expect(page.locator('#sLib')).toHaveClass(/on/);
+    const bar = await box(page, '#tabbar');
+    expect(bar.y + bar.height).toBeLessThanOrEqual(size.height + 1);
+    for (const tab of ['Lib', 'Words', 'Review', 'Profile']) {
+      await page.locator(`#tabbar button[data-go=${tab}]`).click();
+      await expect(page.locator('#s' + tab)).toHaveClass(/on/);
+      await noSideScroll(page);
+      if (tab === 'Review') {
+        const hints = await box(page, '.rv-hints');
+        expect(hints.y + hints.height, 'подсказки «Угадал/Не угадал» над нижним меню').toBeLessThanOrEqual(bar.y + 1);
+      }
+      await info.attach(tab + ' ' + name, { body: await page.screenshot(), contentType: 'image/png' });
+    }
+    expect(errors).toEqual([]);
+  });
+}
+
+test('сохранённые переводы переезжают из localStorage в IndexedDB', async ({ browser }) => {
+  const { page } = await phone(browser, SIZES[1], { seed: Object.assign({}, SEED, { lr_cache: { 'B1|countenance||Her countenance': { translation: 'выражение лица', _ok: 1, _v: 2 } } }) });
+  await page.goto('/');
+  await expect(page.locator('#sLib')).toHaveClass(/on/);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('lr_cache'))).toBeNull();
+  await page.locator('#tabbar button[data-go=Profile]').click();
+  await expect(page.locator('#profList')).toContainText('1 шт.');
+  // и переживает перезапуск
+  await page.reload(); await page.locator('#tabbar button[data-go=Profile]').click();
+  await expect(page.locator('#profList')).toContainText('1 шт.');
+});
+
+test('книга из каталога открывается в читалке', async ({ browser }) => {
+  const { page, errors } = await phone(browser, SIZES[1]);
+  await page.goto('/');
+  await page.locator('#contBox button', { hasText: 'Читать' }).click();
+  await expect(page.locator('#sReader')).toHaveClass(/on/);
+  await expect(page.locator('#loading')).toBeHidden({ timeout: 30000 });
+  const frame = page.frameLocator('#viewer iframe').first();
+  await expect(frame.locator('body')).toContainText(/\w{3,}/, { timeout: 15000 });
+  await page.locator('#rBack').click({ force: true }).catch(() => {});
+  expect(errors).toEqual([]);
+});

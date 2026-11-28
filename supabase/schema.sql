@@ -24,6 +24,27 @@ drop policy if exists "own items" on public.items;
 create policy "own items" on public.items for all to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 
+-- время изменения ставит сервер: устройства с неточными часами не путают синхронизацию
+create or replace function public.items_touch() returns trigger language plpgsql set search_path = public as $$
+begin new.updated_at := now(); return new; end $$;
+drop trigger if exists items_touch on public.items;
+create trigger items_touch before insert or update on public.items for each row execute function public.items_touch();
+-- сайт забирает только изменённое с прошлого раза
+create index if not exists items_user_updated on public.items (user_id, updated_at);
+
+-- ---------- Журнал ошибок: сайт только записывает, читать можно в панели Supabase (Table Editor → errors) ----------
+create table if not exists public.errors (
+  id      bigint generated always as identity primary key,
+  user_id uuid default auth.uid() references auth.users(id) on delete cascade,
+  at      timestamptz not null default now(),
+  ver     int, place text, msg text, stack text, ua text, screen text
+);
+alter table public.errors enable row level security;
+revoke all on public.errors from anon, authenticated;
+grant insert on public.errors to authenticated;
+drop policy if exists "errors insert own" on public.errors;
+create policy "errors insert own" on public.errors for insert to authenticated with check (user_id = (select auth.uid()));
+
 -- ---------- Ключи API: браузер не может их прочитать ----------
 create table if not exists public.user_secrets (
   user_id    uuid primary key references auth.users(id) on delete cascade,

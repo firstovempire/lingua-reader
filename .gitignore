@@ -3,3 +3,5 @@ node_modules/
 *.zip
 # секретные ключи сюда не кладём
 .env
+test-results/
+playwright-report/
