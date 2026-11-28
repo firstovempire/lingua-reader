@@ -200,3 +200,16 @@ test('вечером читалка предлагает ночную тему, 
   expect(await page.evaluate(() => localStorage.getItem('lr_themeask'))).toBeTruthy();
   expect(errors).toEqual([]);
 });
+
+test('библиотека: «Пора повторить» запускает круг из 5 карточек', async ({ browser }, info) => {
+  const ws = Array.from({ length: 7 }, (_, i) => ({ id: 'q' + i, bookId: 'cat-jane-austen_pride-and-prejudice', w: 'word' + i, tr: 'слово', s: 'A word' + i + '.', t: T0, box: 1, seen: T0, due: T0 }));
+  const { page, errors } = await phone(browser, SIZES[0], { seed: Object.assign({}, SEED, { lr_words: ws }) });
+  await page.goto('/');
+  const q = page.locator('#contBox .card.quick');
+  await expect(q).toContainText('Пора повторить'); await expect(q).toContainText('7 слов · начнём с 5');
+  await info.attach('библиотека', { body: await page.screenshot(), contentType: 'image/png' });
+  await q.getByRole('button', { name: 'Начать' }).click();
+  await expect(page.locator('#sReview')).toHaveClass(/on/);
+  await expect(page.locator('#revBox header')).toContainText('1 из 5');
+  expect(errors).toEqual([]);
+});

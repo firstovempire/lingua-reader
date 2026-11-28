@@ -379,7 +379,7 @@ function show(name) {
   document.body.classList.toggle('tabs', TABBED.has(name));
   document.body.classList.toggle('reading', name === 'Reader');
   $$('#tabbar button').forEach(b => { if (b.dataset.go === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-  if (name !== 'Reader') { closeSheet(); closeModal(); document.body.classList.remove('chrome'); }
+  if (name !== 'Reader') { closeSheet(); closeModal(); document.body.classList.remove('chrome'); $('#askBar').classList.remove('on'); }
   if (name !== 'Login') lgRun++; else if (!was) lgDemo(); // уходим со входа — пример останавливается; повторный показ не начинает сначала
   if (name === 'Lib') renderLib();
   if (name === 'Words') renderWords();
@@ -388,7 +388,11 @@ function show(name) {
   updBadge(); if (CLOUD) updNet();
 }
 $$('#tabbar button').forEach(b => b.onclick = () => show(b.dataset.go));
-function updBadge() { const b = $('#revBadge'); const n = words.filter(w => (w.due || 0) <= Date.now()).length; b.hidden = !n; b.textContent = n; }
+function updBadge() {
+  const b = $('#revBadge'); const n = words.filter(w => (w.due || 0) <= Date.now()).length; b.hidden = !n; b.textContent = n;
+  // цифра на значке приложения на главном экране (Android, компьютер; iPhone — если разрешены уведомления)
+  try { const nav = /** @type {any} */ (navigator); if (nav.setAppBadge) (n ? nav.setAppBadge(n) : nav.clearAppBadge()).catch(() => {}); } catch (e) {}
+}
 
 function applyTheme() {
   document.body.dataset.theme = S.theme;
@@ -570,6 +574,16 @@ function renderLib() {
         h('div', { class: 'muted', style: 'font-size:13px', text: Math.round((cont.pct || 0) * 100) + '%' + minsLeftText(cont) }),
         h('button', { class: 'btn primary', style: 'margin-top:auto;align-self:flex-start', onclick: () => openBook(cont) }, 'Читать'))));
   }
+  const due = words.filter(isDue).length;
+  if (due) {
+    const n = Math.min(QUICK, due);
+    box.append(h('section', { class: 'card quick', 'aria-label': 'Повторение' },
+      h('span', { class: 'q-ic' }, ico('clock', 22)),
+      h('div', { style: 'flex:1;min-width:0;display:flex;flex-direction:column;gap:2px' },
+        h('b', { style: 'font-size:16px', text: 'Пора повторить' }),
+        h('span', { class: 'muted', style: 'font-size:13px', text: due + ' ' + plural(due, 'слово', 'слова', 'слов') + ' · ' + (due > n ? 'начнём с ' + n + ', ' : '') + 'около минуты' })),
+      h('button', { class: 'btn dark', onclick: () => { startRound('quick'); show('Review'); } }, 'Начать')));
+  }
   if (!books.length) { list.append(h('li', { class: 'empty', style: 'display:block;border:0' }, h('div', { style: 'font-family:var(--serif);font-size:18px;color:var(--ink);margin-bottom:6px', text: 'Пока нет книг' }), 'Нажмите «+ EPUB» и выберите файл книги на английском — или возьмите бесплатную классику из каталога.', h('div', { style: 'margin-top:14px' }, h('button', { class: 'btn primary', onclick: openCatalog }, 'Открыть каталог')))); return; }
   sorted.forEach(b => {
     const pct = Math.round((b.pct || 0) * 100);
@@ -699,7 +713,7 @@ function exportWords() {
 $('#wExport').onclick = exportWords;
 
 /* ================= повторение (карточки) ================= */
-const INTERVALS = [1, 3, 7, 21, 60], SWIPE = 90;
+const INTERVALS = [1, 3, 7, 21, 60], SWIPE = 90, QUICK = 5; // QUICK — короткий круг «пока жду автобус»
 let rv = null; // { mode, queue:[id], pos, shown, got:[id], miss:[id] }
 const isDue = w => (w.due || 0) <= Date.now();
 const wById = id => words.find(w => w.id === id);
@@ -709,7 +723,7 @@ function startRound(mode) {
   if (mode === 'missed') list = words.filter(w => w.missed);
   else if (mode === 'all') list = shuffle(words.slice());
   else list = words.filter(isDue).sort((a, b) => (a.due || 0) - (b.due || 0));
-  rv = { mode, queue: list.slice(0, 60).map(w => w.id), pos: 0, shown: false, got: [], miss: [] };
+  rv = { mode, queue: list.slice(0, mode === 'quick' ? QUICK : 60).map(w => w.id), pos: 0, shown: false, got: [], miss: [] };
 }
 let audioCtx = null;
 function beep(good) {
@@ -748,7 +762,7 @@ function renderReview() {
   const dueN = words.filter(isDue).length, missN = words.filter(w => w.missed).length;
   const chip = (on, label, fn, dot) => h('button', { class: 'chip' + (on ? ' on' : ''), 'aria-pressed': String(on), onclick: fn }, dot ? h('i', { class: 'dot' }) : null, label);
   box.append(h('div', { class: 'chips' },
-    chip(rv.mode === 'due', 'На сегодня · ' + dueN, () => { startRound('due'); renderReview(); }),
+    chip(rv.mode === 'due' || rv.mode === 'quick', 'На сегодня · ' + dueN, () => { startRound('due'); renderReview(); }),
     chip(rv.mode === 'missed', 'Не угаданные · ' + missN, () => { if (!missN) { toast('Не угаданных пока нет'); return; } startRound('missed'); renderReview(); }, true),
     chip(rv.mode === 'all', 'Все · ' + words.length, () => { startRound('all'); renderReview(); })));
   box.append(h('div', { class: 'bar', style: 'height:6px;border-radius:3px' }, h('i', { style: `width:${total ? Math.round(Math.min(rv.pos, total) / total * 100) : 0}%` })));
@@ -826,6 +840,8 @@ function renderResult(box) {
     h('section', { class: 'card', style: 'padding:14px;display:flex;flex-direction:column;gap:8px' }, h('h3', { style: 'margin:0;font-size:14px;color:var(--accent);display:flex;gap:6px;align-items:center' }, ico('check', 18), 'Угадал · ' + rv.got.length), rv.got.length ? list(rv.got) : h('span', { class: 'muted', text: '—' })),
     h('section', { class: 'card', style: 'padding:14px;display:flex;flex-direction:column;gap:8px' }, h('h3', { style: 'margin:0;font-size:14px;color:var(--warn);display:flex;gap:8px;align-items:center' }, h('i', { class: 'dot' }), 'Не угадал · ' + rv.miss.length), rv.miss.length ? list(rv.miss) : h('span', { class: 'muted', text: 'Все слова угаданы' })));
   if (rv.miss.length) box.append(h('button', { class: 'btn primary big', onclick: () => { rv = { mode: 'missed', queue: shuffle(rv.miss.slice()), pos: 0, shown: false, got: [], miss: [] }; renderReview(); } }, 'Прогнать не угаданные · ' + rv.miss.length));
+  const more = words.filter(isDue).length;
+  if (rv.mode === 'quick' && more && !rv.miss.length) box.append(h('button', { class: 'btn primary big', onclick: () => { startRound('quick'); renderReview(); } }, 'Ещё ' + Math.min(QUICK, more) + ' ' + plural(Math.min(QUICK, more), 'карточка', 'карточки', 'карточек')));
   box.append(h('button', { class: 'btn big', onclick: () => { startRound('due'); renderReview(); } }, 'Готово'));
 }
 document.addEventListener('keydown', e => {
@@ -1427,7 +1443,7 @@ function toggleSave(c, r) {
 /* --- вечером предложить ночную тему, утром — вернуть дневную. Спрашиваем раз в вечер (утро), решает человек --- */
 function askTheme() {
   const hr = new Date().getHours(), night = hr >= 21 || hr < 6, morning = hr >= 7 && hr < 20;
-  const key = new Date(Date.now() - 6 * 3600e3).toISOString().slice(0, 10) + (night ? 'n' : 'd'); // вечер и ночь до 6 утра — один «вечер»
+  const k6 = new Date(Date.now() - 6 * 3600e3), key = k6.getFullYear() + '-' + (k6.getMonth() + 1) + '-' + k6.getDate() + (night ? 'n' : 'd'); // по местному времени; вечер и ночь до 6 утра — один «вечер»
   let q = '', apply = null;
   if (night && S.theme !== 'night') { q = 'Включить ночную тему?'; apply = () => { S.dayTheme = S.theme; S.theme = 'night'; }; }
   else if (morning && S.theme === 'night' && S.dayTheme) { q = 'Вернуть дневную тему?'; apply = () => { S.theme = S.dayTheme; S.dayTheme = ''; }; }
@@ -1436,7 +1452,7 @@ function askTheme() {
   const bar = $('#askBar'), close = () => { bar.classList.remove('on'); clearTimeout(askT); };
   bar.replaceChildren(h('span', { text: q }),
     h('button', { class: 'ab-yes', onclick: () => { apply(); saveS(); applyReader(); setTimeout(() => { try { rendition.getContents().forEach(c => underlineSaved(c)); } catch (e) {} }, 400); close(); } }, 'Да'),
-    h('button', { class: 'ab-no', onclick: close }, 'Нет'));
+    h('button', { class: 'ab-no', onclick: () => { if (!night) { S.dayTheme = ''; saveS(); } close(); } }, 'Нет')); // утром «Нет» — больше не предлагать вернуть
   bar.classList.add('on'); clearTimeout(askT); askT = setTimeout(close, 12000);
 }
 let askT = null;
@@ -1459,13 +1475,14 @@ function wordForms(x) {
 const UL_RANK = { 'lr-due': 3, 'lr-saved': 2, 'lr-known': 1 };
 // новое слово (ещё ни разу не повторяли) — «учу», а не «пора повторить»
 function ulState(w) { return isDue(w) && (w.seen || w.missed) ? 'lr-due' : (w.box || 0) >= INTERVALS.length ? 'lr-known' : 'lr-saved'; }
+const apos = s => s.replace(/’/g, "'"); // в книгах апостроф бывает и прямой, и типографский
 function ulIndex() {
   const single = new Map(), phrases = new Map();
   const put = (m, k, st) => { if (!m.has(k) || UL_RANK[st] > UL_RANK[m.get(k)]) m.set(k, st); };
   for (const w of words) {
     const st = ulState(w);
     for (const raw of [w.w, w.base]) {
-      const x = norm(raw).toLowerCase(); if (x.length < 2 || x.length > 60) continue;
+      const x = apos(norm(raw).toLowerCase()); if (x.length < 2 || x.length > 60) continue;
       // фразы и слова с апострофом или дефисом (don't, well-known) — через регулярное выражение
       if (!/^[a-zÀ-ÿ]+$/.test(x)) put(phrases, x, st); else wordForms(x).forEach(f => put(single, f, st));
     }
@@ -1475,18 +1492,19 @@ function ulIndex() {
 function underlineSaved(contents) {
   if (!contents || !rendition) return;
   const mine = ulAdded.get(contents.document) || new Set(); ulAdded.set(contents.document, mine);
-  for (const [d, set] of ulAdded) if (d !== contents.document && !d.defaultView) ulAdded.delete(d); // главы, которых уже нет
+  // главы, которых уже нет: epub.js хранит их подчёркивания и вернёт при повторном показе — убираем совсем
+  for (const [d, set] of ulAdded) if (d !== contents.document && !d.defaultView) { set.forEach(cfi => { try { rendition.annotations.remove(cfi, 'underline'); } catch (e) {} }); ulAdded.delete(d); }
   mine.forEach(cfi => { try { rendition.annotations.remove(cfi, 'underline'); } catch (e) {} }); mine.clear();
   if (S.ul === false || !words.length) return;
   const { single, phrases } = ulIndex();
-  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+').replace(/'/g, "['’]");
   const reP = phrases.size ? new RegExp('(^|[^A-Za-zÀ-ÿ])(' + [...phrases.keys()].sort((a, b) => b.length - a.length).map(esc).join('|') + ')(?![A-Za-zÀ-ÿ])', 'gi') : null;
   const reW = /[A-Za-zÀ-ÿ]+/g;
   const doc = contents.document, walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT); let n, count = 0;
   const mark = (node, a, b, st) => { const r = doc.createRange(); r.setStart(node, a); r.setEnd(node, b); try { const cfi = contents.cfiFromRange(r); rendition.annotations.underline(cfi, {}, null, st, { 'stroke-opacity': '1', 'mix-blend-mode': 'normal' }); mine.add(cfi); count++; } catch (e) {} };
   while ((n = walker.nextNode()) && count < 400) {
     const taken = []; let m;
-    if (reP) { reP.lastIndex = 0; while ((m = reP.exec(n.data)) && count < 400) { const a = m.index + m[1].length, b = a + m[2].length; taken.push([a, b]); mark(n, a, b, phrases.get(norm(m[2]).toLowerCase()) || 'lr-saved'); } }
+    if (reP) { reP.lastIndex = 0; while ((m = reP.exec(n.data)) && count < 400) { const a = m.index + m[1].length, b = a + m[2].length; taken.push([a, b]); mark(n, a, b, phrases.get(apos(norm(m[2]).toLowerCase())) || 'lr-saved'); } }
     reW.lastIndex = 0;
     while ((m = reW.exec(n.data)) && count < 400) {
       const st = single.get(m[0].toLowerCase()); if (!st) continue;
