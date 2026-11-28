@@ -6,7 +6,7 @@
 (() => {
 'use strict';
 
-const VER = 42; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 43; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -646,7 +646,7 @@ async function addFromCatalog(x, btn) {
     const buf = await fetchBuf('catalog/' + x.id + '.epub', p => btn.replaceChildren(h('span', { class: 'spin' }), ' Скачиваю… ' + p + '%'));
     const nb = { id: 'cat-' + x.id, cat: x.id, title: x.title, author: x.author, cover: 'catalog/covers/' + x.id + '.jpg', added: Date.now(), up: true, pct: 0 };
     await files.put(nb.id, buf);
-    if (books.some(b => b.cat === x.id)) return;
+    if (books.some(b => b.cat === x.id)) { renderCatalog(); return; } // пока качали, книга пришла с другого устройства
     books.unshift(nb); saveBooks(); renderLib(); buzz(10);
     toast('Добавлено: ' + x.title); renderCatalog();
   } catch (e) { btn.disabled = false; btn.textContent = 'Повторить'; toast(navigator.onLine ? 'Не удалось скачать книгу. Попробуйте ещё раз.' : 'Нет интернета. Добавьте книгу, когда связь вернётся.', 4000); }
@@ -677,9 +677,11 @@ function renderWords() {
 $('#wSearch').oninput = renderWords;
 // где слово в повторении: интервалы 1–3–7–21–60 дней, после пятого верного ответа — выучено
 function wordState(w) {
+  const left = (w.due || 0) - Date.now();
+  if (left <= 0) return 'пора повторить';
   if ((w.box || 0) >= INTERVALS.length) return 'выучено';
-  const d = Math.ceil(((w.due || 0) - Date.now()) / DAY);
-  if (d <= 0) return 'пора повторить';
+  if (left < DAY) return 'повтор сегодня';
+  const d = Math.round(left / DAY);
   return 'повтор через ' + d + ' ' + plural(d, 'день', 'дня', 'дней');
 }
 // словарь файлом: таблица через табуляцию — Anki (Файл → Импорт) и Excel/Numbers открывают её как есть
@@ -688,7 +690,7 @@ function exportWords() {
   const rows = words.map(w => [w.w, w.tr, w.tc, w.s, w.st, (books.find(b => b.id === w.bookId) || {}).title, wordState(w)].map(cell).join('\t'));
   const txt = ['#separator:tab', '#html:false', '#columns:' + ['English', 'Русский', 'Транскрипция', 'Предложение', 'Перевод предложения', 'Книга', 'Повторение'].join('\t'), ...rows, ''].join('\n');
   const name = 'lingua-slova-' + new Date().toISOString().slice(0, 10) + '.txt';
-  const file = new File([txt], name, { type: 'text/plain' });
+  const file = new File(['\ufeff' + txt], name, { type: 'text/plain' });
   // телефон: системное «Поделиться» (сохранить в Файлы, отправить себе); компьютер — обычная загрузка
   if (!isDesk() && navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Словарь Lingua Reader' }).catch(() => {}); return; }
   const a = h('a', { href: URL.createObjectURL(file), download: name }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
@@ -907,13 +909,13 @@ async function openBook(b, atCfi) {
   let buf; try { buf = await files.get(b.id); } catch (e) {}
   if (!buf && b.cat) {
     $('#loading').lastChild.textContent = 'Скачиваю книгу…';
-    try { buf = await fetchBuf('catalog/' + b.cat + '.epub', p => { if (curBook === b) $('#loading').lastChild.textContent = 'Скачиваю книгу… ' + p + '%'; }); await files.put(b.id, buf); } catch (e) { console.warn(e); }
-    $('#loading').lastChild.textContent = 'Открываю книгу…';
+    try { buf = await fetchBuf('catalog/' + b.cat + '.epub', p => { if (my === openSeq) $('#loading').lastChild.textContent = 'Скачиваю книгу… ' + p + '%'; }); await files.put(b.id, buf); } catch (e) { console.warn(e); }
+    if (my === openSeq) $('#loading').lastChild.textContent = 'Открываю книгу…';
   }
   if (!buf && CLOUD && user && !b.cat) {
     $('#loading').lastChild.textContent = 'Скачиваю книгу…';
     try { const r = await sb.storage.from('books').download(bookPath(b)); if (r.error) throw r.error; buf = await r.data.arrayBuffer(); await files.put(b.id, buf); } catch (e) { console.warn(e); }
-    $('#loading').lastChild.textContent = 'Открываю книгу…';
+    if (my === openSeq) $('#loading').lastChild.textContent = 'Открываю книгу…';
   }
   if (stale()) return;
   if (!buf) { $('#loading').style.display = 'none'; toast(!navigator.onLine || sync.offline ? 'Эта книга ещё не скачана на устройство. Откройте её, когда появится интернет.' : b.cat || CLOUD ? 'Не удалось скачать книгу. Проверьте интернет и попробуйте ещё раз.' : 'Файла этой книги нет в этом браузере. Добавьте EPUB заново.', 5000); show('Lib'); return; }
@@ -956,8 +958,8 @@ async function openBook(b, atCfi) {
       if (book === bk) await rendition.display(start);
     } catch (e) {}
   }
+  if (book !== bk || stale()) return;
   $('#loading').style.display = 'none';
-  if (book !== bk) return;
   b.lastRead = Date.now(); saveBooks();
   // первое чтение: подсказка «коснитесь слова» висит до первого перевода; меню показываем со следующего раза
   const firstTry = !LS.get('lr_tried', false) && !words.length;

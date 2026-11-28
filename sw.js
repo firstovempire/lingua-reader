@@ -1,6 +1,6 @@
 // Офлайн-оболочка: сайт, библиотеки и шрифты сохраняются, книги лежат в IndexedDB.
 // Перевод всегда идёт по сети.
-const CACHE = 'lingua-v42';
+const CACHE = 'lingua-v43';
 const SHELL = ['./', 'index.html', 'app.js', 'lib/epub.min.js', 'lib/jszip.min.js', 'lib/supabase.js', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).catch(() => {})); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
