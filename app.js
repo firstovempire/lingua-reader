@@ -973,6 +973,7 @@ async function openBook(b, atCfi) {
     if (n < 3 && !firstTry) { LS.set('lr_taphint', n + 1); tapHintT = setTimeout(() => { $('#tapHint').classList.add('on'); tapHintT = setTimeout(() => $('#tapHint').classList.remove('on'), 2600); }, 2400); } }
   rendition.on('relocated', onRelocated);
   if (rendition.location && rendition.location.start) onRelocated(rendition.location);
+  setTimeout(() => { if (book === bk) askTheme(); }, 6000); // после подсказки про меню
   if (holding) setTimeout(() => { if (hold === holding && !holding.err) { hold = null; if (book === bk && rendition && rendition.location) onRelocated(rendition.location); } }, 6000); // страницы считаются долго — не ждём
   // место не нашлось — вернуться по проценту, когда страницы посчитаны; потом снова сохраняем
   const settle = async () => {
@@ -1423,20 +1424,41 @@ function toggleSave(c, r) {
   try { rendition.getContents().forEach(ct => underlineSaved(ct)); } catch (e) {}
 }
 
+/* --- вечером предложить ночную тему, утром — вернуть дневную. Спрашиваем раз в вечер (утро), решает человек --- */
+function askTheme() {
+  const hr = new Date().getHours(), night = hr >= 21 || hr < 6, morning = hr >= 7 && hr < 20;
+  const key = new Date(Date.now() - 6 * 3600e3).toISOString().slice(0, 10) + (night ? 'n' : 'd'); // вечер и ночь до 6 утра — один «вечер»
+  let q = '', apply = null;
+  if (night && S.theme !== 'night') { q = 'Включить ночную тему?'; apply = () => { S.dayTheme = S.theme; S.theme = 'night'; }; }
+  else if (morning && S.theme === 'night' && S.dayTheme) { q = 'Вернуть дневную тему?'; apply = () => { S.theme = S.dayTheme; S.dayTheme = ''; }; }
+  if (!q || LS.get('lr_themeask', '') === key || current !== 'Reader') return;
+  LS.set('lr_themeask', key);
+  const bar = $('#askBar'), close = () => { bar.classList.remove('on'); clearTimeout(askT); };
+  bar.replaceChildren(h('span', { text: q }),
+    h('button', { class: 'ab-yes', onclick: () => { apply(); saveS(); applyReader(); setTimeout(() => { try { rendition.getContents().forEach(c => underlineSaved(c)); } catch (e) {} }, 400); close(); } }, 'Да'),
+    h('button', { class: 'ab-no', onclick: close }, 'Нет'));
+  bar.classList.add('on'); clearTimeout(askT); askT = setTimeout(close, 12000);
+}
+let askT = null;
+
 /* --- подчёркивание сохранённых слов во всём тексте --- */
-const ulAdded = new Set();
+const ulAdded = new Map(); // документ главы → его подчёркивания: в прокрутке видно несколько глав сразу
 // формы слова: acknowledge → acknowledges, acknowledged, acknowledging; study → studies, studied
 function wordForms(x) {
   const out = new Set([x]); if (!/^[a-z]+$/.test(x) || x.length < 3) return out;
-  ['s', 'es', 'ed', 'd', 'ing', 'er', 'est', 'ly'].forEach(e => out.add(x + e));
-  if (x.endsWith('e')) { out.add(x.slice(0, -1) + 'ing'); out.add(x.slice(0, -1) + 'ed'); }
-  if (/[^aeiou]y$/.test(x)) { out.add(x.slice(0, -1) + 'ies'); out.add(x.slice(0, -1) + 'ied'); out.add(x.slice(0, -1) + 'ily'); }
-  if (/[^aeiou][aeiou][bdgmnprt]$/.test(x) && x.length <= 5) { const d = x + x.slice(-1); out.add(d + 'ed'); out.add(d + 'ing'); out.add(d + 'er'); }
+  // только надёжные окончания: -er/-est/-ly и удвоение с -er дают чужие слова (let → letter, for → forest)
+  out.add(x + 's');
+  if (/(s|x|z|ch|sh|o)$/.test(x)) out.add(x + 'es');
+  if (x.endsWith('e')) { out.add(x + 'd'); out.add(x.slice(0, -1) + 'ing'); }
+  else { out.add(x + 'ed'); out.add(x + 'ing'); }
+  if (/[^aeiou]y$/.test(x)) { out.add(x.slice(0, -1) + 'ies'); out.add(x.slice(0, -1) + 'ied'); }
+  if (/[^aeiou][aeiou][bdgmnprt]$/.test(x) && x.length <= 5) { const d = x + x.slice(-1); out.add(d + 'ed'); out.add(d + 'ing'); }
   return out;
 }
 // состояние слова в книге: пора повторить важнее, чем «учу», «учу» важнее, чем «выучено»
 const UL_RANK = { 'lr-due': 3, 'lr-saved': 2, 'lr-known': 1 };
-function ulState(w) { return isDue(w) ? 'lr-due' : (w.box || 0) >= INTERVALS.length ? 'lr-known' : 'lr-saved'; }
+// новое слово (ещё ни разу не повторяли) — «учу», а не «пора повторить»
+function ulState(w) { return isDue(w) && (w.seen || w.missed) ? 'lr-due' : (w.box || 0) >= INTERVALS.length ? 'lr-known' : 'lr-saved'; }
 function ulIndex() {
   const single = new Map(), phrases = new Map();
   const put = (m, k, st) => { if (!m.has(k) || UL_RANK[st] > UL_RANK[m.get(k)]) m.set(k, st); };
@@ -1444,21 +1466,24 @@ function ulIndex() {
     const st = ulState(w);
     for (const raw of [w.w, w.base]) {
       const x = norm(raw).toLowerCase(); if (x.length < 2 || x.length > 60) continue;
-      if (/\s/.test(x)) put(phrases, x, st); else wordForms(x).forEach(f => put(single, f, st));
+      // фразы и слова с апострофом или дефисом (don't, well-known) — через регулярное выражение
+      if (!/^[a-zÀ-ÿ]+$/.test(x)) put(phrases, x, st); else wordForms(x).forEach(f => put(single, f, st));
     }
   }
   return { single, phrases };
 }
 function underlineSaved(contents) {
   if (!contents || !rendition) return;
-  ulAdded.forEach(cfi => { try { rendition.annotations.remove(cfi, 'underline'); } catch (e) {} }); ulAdded.clear();
+  const mine = ulAdded.get(contents.document) || new Set(); ulAdded.set(contents.document, mine);
+  for (const [d, set] of ulAdded) if (d !== contents.document && !d.defaultView) ulAdded.delete(d); // главы, которых уже нет
+  mine.forEach(cfi => { try { rendition.annotations.remove(cfi, 'underline'); } catch (e) {} }); mine.clear();
   if (S.ul === false || !words.length) return;
   const { single, phrases } = ulIndex();
   const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
   const reP = phrases.size ? new RegExp('(^|[^A-Za-zÀ-ÿ])(' + [...phrases.keys()].sort((a, b) => b.length - a.length).map(esc).join('|') + ')(?![A-Za-zÀ-ÿ])', 'gi') : null;
   const reW = /[A-Za-zÀ-ÿ]+/g;
   const doc = contents.document, walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT); let n, count = 0;
-  const mark = (node, a, b, st) => { const r = doc.createRange(); r.setStart(node, a); r.setEnd(node, b); try { const cfi = contents.cfiFromRange(r); rendition.annotations.underline(cfi, {}, null, st, { 'stroke-opacity': '1', 'mix-blend-mode': 'normal' }); ulAdded.add(cfi); count++; } catch (e) {} };
+  const mark = (node, a, b, st) => { const r = doc.createRange(); r.setStart(node, a); r.setEnd(node, b); try { const cfi = contents.cfiFromRange(r); rendition.annotations.underline(cfi, {}, null, st, { 'stroke-opacity': '1', 'mix-blend-mode': 'normal' }); mine.add(cfi); count++; } catch (e) {} };
   while ((n = walker.nextNode()) && count < 400) {
     const taken = []; let m;
     if (reP) { reP.lastIndex = 0; while ((m = reP.exec(n.data)) && count < 400) { const a = m.index + m[1].length, b = a + m[2].length; taken.push([a, b]); mark(n, a, b, phrases.get(norm(m[2]).toLowerCase()) || 'lr-saved'); } }
@@ -1539,7 +1564,7 @@ function renderAa() {
     h('div', { class: 'aa-row' }, h('span', null, 'Поля'), seg([['s', 'Узкие'], ['m', 'Средние'], ['l', 'Широкие']], S.margin, v => { S.margin = v; upd(); }, 'Поля')),
     h('div', { class: 'aa-row' }, h('span', null, 'Словарь'), seg([['on', 'Подчёркивать'], ['off', 'Нет']], S.ul === false ? 'off' : 'on', v => { S.ul = v === 'on'; upd(); }, 'Слова из словаря')),
     S.ul === false ? null : h('p', { class: 'aa-legend' }, h('i', { class: 'lg-saved' }), 'учу', h('i', { class: 'lg-due' }), 'пора повторить', h('i', { class: 'lg-known' }), 'выучено'),
-    h('div', { class: 'aa-row' }, h('span', null, 'Тема'), h('div', { class: 'themes', role: 'radiogroup', 'aria-label': 'Тема' }, Object.entries(T).map(([k, [t, bg, fg]]) => h('button', { role: 'radio', 'aria-checked': String(S.theme === k), style: `background:${bg};color:${fg}`, onclick: () => { S.theme = k; upd(); } }, t))))
+    h('div', { class: 'aa-row' }, h('span', null, 'Тема'), h('div', { class: 'themes', role: 'radiogroup', 'aria-label': 'Тема' }, Object.entries(T).map(([k, [t, bg, fg]]) => h('button', { role: 'radio', 'aria-checked': String(S.theme === k), style: `background:${bg};color:${fg}`, onclick: () => { S.theme = k; S.dayTheme = ''; upd(); } }, t))))
   );
 }
 $('#rBack2').onclick = () => $('#rBack').click();
@@ -1620,7 +1645,10 @@ function afterPull() {
   updBadge();
   if (current === 'Lib') renderLib(); else if (current === 'Words') renderWords();
   if (current !== 'Reader') applyTheme();
+  refreshUl();
 }
+// состояние слов могло измениться (повторение, другое устройство) — перерисовать подчёркивания в открытой книге
+function refreshUl() { try { if (rendition) rendition.getContents().forEach(c => underlineSaved(c)); } catch (e) {} }
 async function afterLogin() {
   if (!user || loggedFor === user.id) return; loggedFor = user.id;
   const prev = LS.get('lr_uid', '');

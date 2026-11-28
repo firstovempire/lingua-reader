@@ -139,6 +139,11 @@ body.scrollmode #viewer .epub-container{-webkit-overflow-scrolling:touch}
 #tapHint{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:999px;font-size:14px;white-space:nowrap;z-index:12;opacity:0;pointer-events:none;transition:opacity .3s}
 #tapHint.on{opacity:.92}
 #wordHint{position:absolute;left:50%;bottom:calc(var(--safe-b) + 56px);transform:translate(-50%,8px);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:999px;font-size:15px;width:max-content;max-width:calc(100% - 32px);text-align:center;z-index:12;opacity:0;pointer-events:none;transition:opacity .3s,transform .3s;box-shadow:0 6px 16px rgba(0,0,0,.18)}
+#askBar{position:absolute;left:50%;top:calc(var(--safe-t) + 58px);transform:translate(-50%,-8px);z-index:13;display:flex;align-items:center;gap:6px;background:var(--ink);color:var(--paper);padding:6px 6px 6px 16px;border-radius:999px;font-size:14px;width:max-content;max-width:calc(100% - 24px);box-shadow:0 6px 16px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
+#askBar.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#askBar button{border:0;border-radius:999px;min-height:36px;padding:0 14px;font:inherit;font-weight:600}
+#askBar .ab-yes{background:var(--paper);color:var(--ink)}
+#askBar .ab-no{background:transparent;color:var(--paper);opacity:.8}
 #wordHint.on{opacity:.94;transform:translate(-50%,0)}
 body.chrome #wordHint,#nextCh.on~#wordHint{opacity:0}
 #mini{position:absolute;left:var(--gut);right:var(--gut);bottom:calc(var(--safe-b) + 12px);display:flex;justify-content:center;align-items:center;gap:8px;font-size:12px;color:var(--muted);pointer-events:none;white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -510,6 +515,7 @@ body[data-theme=night] .cat-ad{color:#FBF2D6}
   body.reading #rtop{transform:none;opacity:1}
   body.reading #viewer{top:calc(var(--safe-t) + 76px)}
   #tapHint{display:none}
+  #askBar{top:calc(var(--safe-t) + 86px)}
   body.sheet-open #sReader{right:400px}
   body.sheet-open #rtop,body.sheet-open #rbottom{right:0}
   #hint{display:none}
@@ -669,6 +675,7 @@ body[data-theme=night] .cat-ad{color:#FBF2D6}
   <button id="nextCh" class="btn dark">Следующая глава<svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="m9 6 6 6-6 6"/></svg></button>
   <div id="mini"><span id="miniBar" aria-hidden="true"><i></i></span><span id="miniPct"></span></div>
   <div id="tapHint" aria-hidden="true">Меню — коснитесь поля сверху или снизу</div>
+  <div id="askBar" role="dialog" aria-label="Тема"></div>
   <div id="wordHint" role="status" aria-hidden="true">Коснитесь слова — появится перевод</div>
   <div id="loading"><span class="spin"></span>Открываю книгу…</div>
   <header id="rtop"><div class="row">
