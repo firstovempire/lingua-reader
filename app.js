@@ -6,7 +6,7 @@
 (() => {
 'use strict';
 
-const VER = 40; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 41; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -45,8 +45,24 @@ const LS = {
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const norm = s => String(s || '').replace(/\s+/g, ' ').trim();
 let toastT; function toast(m, ms = 2400) { const t = $('#toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(toastT); toastT = setTimeout(() => t.style.display = 'none', ms); }
+// скачать файл с процентами: книги с картинками весят 5–12 МБ, без цифр кажется, что всё зависло
+async function fetchBuf(url, onPct) {
+  const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status);
+  const total = +(r.headers.get('content-length') || 0);
+  if (!total || !r.body || !onPct) return r.arrayBuffer();
+  const rd = r.body.getReader(), parts = []; let got = 0;
+  for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; onPct(Math.min(99, Math.floor(got * 100 / total))); }
+  const out = new Uint8Array(got); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+  return out.buffer;
+}
 const buzz = (ms = 8) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
 const isDesk = () => matchMedia('(min-width:900px)').matches;
+// читалка (epub.js + JSZip, ~320 КБ) нужна только для книг: грузим после показа библиотеки, а не до него
+let epubP = null;
+const loadEpub = () => /** @type {any} */ (window).ePub ? Promise.resolve() : epubP || (epubP = (async () => {
+  const add = src => new Promise((ok, no) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => { el.remove(); no(new Error('Не удалось загрузить читалку. Проверьте интернет.')); }; document.head.append(el); });
+  try { await add('lib/jszip.min.js'); await add('lib/epub.min.js'); } catch (e) { epubP = null; throw e; }
+})());
 function speak(text) { try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'en-US'; u.rate = 0.9; const v = speechSynthesis.getVoices().find(v => /^en(-|_)US/i.test(v.lang)); if (v) u.voice = v; speechSynthesis.speak(u); } catch (e) {} }
 
 /* ================= облако ================= */
@@ -518,6 +534,7 @@ const isFresh = (c, r) => isFull(r) && (r._v === 2 || (isPhrase(c.sel) ? Array.i
 
 /* ================= библиотека ================= */
 async function readMeta(buf, fallback) {
+  await loadEpub();
   const b = ePub(buf.slice(0));
   let title = fallback, author = '', cover = '';
   try { const m = await b.loaded.metadata; title = norm(m.title) || fallback; author = norm(m.creator); } catch (e) {}
@@ -624,8 +641,7 @@ async function addFromCatalog(x, btn) {
   if (books.some(b => b.cat === x.id)) return;
   btn.disabled = true; btn.replaceChildren(h('span', { class: 'spin' }), ' Скачиваю…');
   try {
-    const r = await fetch('catalog/' + x.id + '.epub'); if (!r.ok) throw new Error('файл недоступен');
-    const buf = await r.arrayBuffer();
+    const buf = await fetchBuf('catalog/' + x.id + '.epub', p => btn.replaceChildren(h('span', { class: 'spin' }), ' Скачиваю… ' + p + '%'));
     const nb = { id: 'cat-' + x.id, cat: x.id, title: x.title, author: x.author, cover: 'catalog/covers/' + x.id + '.jpg', added: Date.now(), up: true, pct: 0 };
     await files.put(nb.id, buf);
     books.unshift(nb); saveBooks(); renderLib(); buzz(10);
@@ -864,7 +880,7 @@ async function openBook(b, atCfi) {
   let buf; try { buf = await files.get(b.id); } catch (e) {}
   if (!buf && b.cat) {
     $('#loading').lastChild.textContent = 'Скачиваю книгу…';
-    try { const r = await fetch('catalog/' + b.cat + '.epub'); if (!r.ok) throw new Error(String(r.status)); buf = await r.arrayBuffer(); await files.put(b.id, buf); } catch (e) { console.warn(e); }
+    try { buf = await fetchBuf('catalog/' + b.cat + '.epub', p => { if (curBook === b) $('#loading').lastChild.textContent = 'Скачиваю книгу… ' + p + '%'; }); await files.put(b.id, buf); } catch (e) { console.warn(e); }
     $('#loading').lastChild.textContent = 'Открываю книгу…';
   }
   if (!buf && CLOUD && user && !b.cat) {
@@ -873,10 +889,13 @@ async function openBook(b, atCfi) {
     $('#loading').lastChild.textContent = 'Открываю книгу…';
   }
   if (!buf) { $('#loading').style.display = 'none'; toast(!navigator.onLine || sync.offline ? 'Эта книга ещё не скачана на устройство. Откройте её, когда появится интернет.' : b.cat || CLOUD ? 'Не удалось скачать книгу. Проверьте интернет и попробуйте ещё раз.' : 'Файла этой книги нет в этом браузере. Добавьте EPUB заново.', 5000); show('Lib'); return; }
+  try { await loadEpub(); } catch (e) { if (curBook !== b) return; $('#loading').style.display = 'none'; toast(e.message, 5000); show('Lib'); return; }
+  if (curBook !== b || current !== 'Reader') return;
   const bk = ePub(buf); book = bk;
   const failOpen = e => { if (book !== bk) return; logErr('open', e); $('#loading').style.display = 'none'; toast('Не удалось открыть книгу: файл повреждён или это не EPUB.', 5000); hold = null; book = null; try { bk.destroy(); } catch (e2) {} show('Lib'); };
   // битый файл: epub.js не отклоняет opened, а шлёт openFailed — иначе «Открываю книгу…» висело бы вечно
-  try { await new Promise((ok, no) => { bk.on('openFailed', no); bk.opened.then(ok, no); setTimeout(() => no(new Error('open timeout')), 30000); }); }
+  // 90 с: большие книги с картинками на старом телефоне открываются долго
+  try { await new Promise((ok, no) => { bk.on('openFailed', no); bk.opened.then(ok, no); setTimeout(() => no(new Error('open timeout')), 90000); }); }
   catch (e) { failOpen(e); return; }
   if (book !== bk) return;
   // iOS Safari не передаёт касания в iframe без allow-scripts, поэтому скрипты разрешаем,
@@ -914,7 +933,7 @@ async function openBook(b, atCfi) {
   b.lastRead = Date.now(); saveBooks();
   // первое чтение: подсказка «коснитесь слова» висит до первого перевода; меню показываем со следующего раза
   const firstTry = !LS.get('lr_tried', false) && !words.length;
-  if (firstTry) { $('#wordHint').textContent = isDesk() ? 'Нажмите на слово — появится перевод' : 'Коснитесь слова — появится перевод'; setTimeout(() => { if (book === bk && !LS.get('lr_tried', false)) $('#wordHint').classList.add('on'); }, 900); }
+  if (firstTry) { $('#wordHint').textContent = isDesk() ? 'Нажмите на слово — появится перевод' : 'Коснитесь слова — появится перевод'; setTimeout(() => { if (book === bk && !LS.get('lr_tried', false)) { $('#wordHint').classList.add('on'); $('#wordHint').setAttribute('aria-hidden', 'false'); } }, 900); }
   // подсказка: как открыть меню (первые три раза), панели видны пару секунд
   if (!isDesk()) { const n = LS.get('lr_taphint', 0); toggleChrome(true); setTimeout(() => { if (current === 'Reader') toggleChrome(false); }, 2200);
     if (n < 3 && !firstTry) { LS.set('lr_taphint', n + 1); tapHintT = setTimeout(() => { $('#tapHint').classList.add('on'); tapHintT = setTimeout(() => $('#tapHint').classList.remove('on'), 2600); }, 2400); } }
@@ -1209,7 +1228,7 @@ ${isPhrase(c.sel) ? `{
 }
 const cacheKey = c => (S.level || 'B1') + '|' + c.sel.toLowerCase() + '||' + c.sentence.slice(0, 220);
 async function translate(c) {
-  if (!LS.get('lr_tried', false)) { LS.set('lr_tried', true); $('#wordHint').classList.remove('on'); }
+  if (!LS.get('lr_tried', false)) { LS.set('lr_tried', true); $('#wordHint').classList.remove('on'); $('#wordHint').setAttribute('aria-hidden', 'true'); }
   if (aborter) aborter.abort(); aborter = new AbortController(); const signal = aborter.signal;
   if (useBubble()) openBubble(c);
   else {
@@ -1633,6 +1652,8 @@ const saveNow = () => { if (progT) { clearTimeout(progT); progT = null; saveBook
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { saveNow(); flush(); } });
 addEventListener('pagehide', saveNow);
 boot();
+// читалку подгружаем заранее, когда телефон свободен: «Читать» открывает книгу без ожидания
+setTimeout(() => { const go = () => loadEpub().catch(() => {}); 'requestIdleCallback' in window ? requestIdleCallback(go, { timeout: 4000 }) : go(); }, 1200);
 $('#keySkip').addEventListener('click', () => LS.set('lr_skipkey', true));
 window.__lr = { get rendition() { return rendition; }, get book() { return book; }, S, timings, sync, get queue() { return queue; }, get user() { return user; } };
 })();
