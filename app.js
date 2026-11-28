@@ -6,7 +6,7 @@
 (() => {
 'use strict';
 
-const VER = 43; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 44; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -35,7 +35,8 @@ const P = {
   mark: '<path d="M6 3h12v18l-6-4-6 4z"/>', check: '<path d="m5 12 5 5 9-10"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>', ext: '<path d="M7 17 17 7M9 7h8v8"/>',
   flame: '<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5.3 1.6 1 2.6 2 3 0-3 .5-5.5 1-8.5z"/>',
-  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  chart: '<path d="M5 20V11M12 20V5M19 20v-6"/>'
 };
 const ico = (n, size = 22, extra = '') => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'i'); s.setAttribute('aria-hidden', 'true'); s.style.cssText = `width:${size}px;height:${size}px;${extra}`; s.innerHTML = P[n]; return s; };
 const LS = {
@@ -593,8 +594,38 @@ function renderLib() {
     list.append(h('li', null,
       h('button', { class: 'open', onclick: () => openBook(b) }, coverEl(b, 52, 76, 8),
         h('div', { style: 'flex:1;min-width:0;display:flex;flex-direction:column;gap:4px' }, h('div', { class: 't', text: b.title }), h('div', { class: 'muted', style: 'font-size:14px', text: b.author || '' }), status)),
+      h('button', { class: 'icobtn', 'aria-label': 'Статистика «' + b.title + '»', style: 'color:var(--muted)', onclick: () => openStats(b) }, ico('chart', 20)),
       h('button', { class: 'icobtn', 'aria-label': 'Удалить «' + b.title + '»', style: 'color:var(--muted)', onclick: () => delBook(b) }, ico('trash', 20))));
   });
+}
+// статистика книги: прогресс, слова из неё в словаре, лексика (для книг каталога — посчитана заранее, catalog/stats.js)
+async function openStats(b) {
+  const ws = words.filter(w => w.bookId === b.id);
+  const known = ws.filter(w => (w.box || 0) >= INTERVALS.length).length, due = ws.filter(isDue).length;
+  const pct = Math.round((b.pct || 0) * 100);
+  const row = (k, v) => h('div', { class: 'st-row' }, h('span', { class: 'muted', text: k }), h('b', { text: v }));
+  const fmt = n => n.toLocaleString('ru-RU');
+  const kids = [
+    h('h3', { style: 'margin:0;font-family:var(--serif);font-size:21px', lang: 'en', text: b.title }),
+    b.author ? h('p', { class: 'muted', style: 'margin:-10px 0 0', lang: 'en', text: b.author }) : null,
+    h('section', { class: 'st-card' }, h('h4', null, 'Чтение'),
+      h('div', { class: 'bar', style: 'height:6px' }, h('i', { style: `width:${pct}%` })),
+      row('Прочитано', pct + '%'),
+      b.added ? row('Добавлена', new Date(b.added).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })) : null,
+      b.lastRead ? row('Последний раз', new Date(b.lastRead).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })) : null),
+    h('section', { class: 'st-card' }, h('h4', null, 'Слова из этой книги'),
+      ws.length ? [row('В словаре', fmt(ws.length)), row('Выучено', fmt(known)), row('Учу', fmt(ws.length - known)), due ? row('Пора повторить', fmt(due)) : null,
+        h('button', { class: 'btn primary', style: 'margin-top:6px', onclick: () => { rv = { mode: 'book', queue: shuffle(ws.map(w => w.id)).slice(0, 60), pos: 0, shown: false, got: [], miss: [] }; closeModal(); show('Review'); } }, 'Повторить слова из книги')]
+        : h('p', { class: 'muted', style: 'margin:0;font-size:14px', text: 'Пока нет. Коснитесь слова в книге и сохраните его — оно появится здесь.' }))];
+  const lex = h('section', { class: 'st-card' }); kids.push(lex);
+  openModal(kids.filter(Boolean));
+  let c = null; if (b.cat) { try { c = (await loadCatalog()).find(x => x.id === b.cat); } catch (e) {} }
+  if (c && c.common) lex.append(h('h4', null, 'Лексика'),
+    row('Слов в книге', fmt(c.words)),
+    row('Частые слова', c.common + '% текста'),
+    row('Редких слов', '≈ ' + fmt(Math.round(c.rare / 50) * 50)),
+    h('p', { class: 'muted', style: 'margin:4px 0 0;font-size:13px', text: 'Частые — 2000 слов, которые встречаются почти во всех книгах каталога. Чем больше их доля, тем легче читать; редкие слова — те, что придётся переводить.' }));
+  else lex.remove();
 }
 async function delBook(b) {
   if (!confirm('Удалить «' + b.title + '»? Слова и заметки из неё тоже удалятся.')) return;
@@ -839,10 +870,11 @@ function renderResult(box) {
   box.append(h('h2', { style: 'margin:4px 0 0;font-family:var(--serif);font-size:22px;font-weight:600', text: 'Итог круга' }),
     h('section', { class: 'card', style: 'padding:14px;display:flex;flex-direction:column;gap:8px' }, h('h3', { style: 'margin:0;font-size:14px;color:var(--accent);display:flex;gap:6px;align-items:center' }, ico('check', 18), 'Угадал · ' + rv.got.length), rv.got.length ? list(rv.got) : h('span', { class: 'muted', text: '—' })),
     h('section', { class: 'card', style: 'padding:14px;display:flex;flex-direction:column;gap:8px' }, h('h3', { style: 'margin:0;font-size:14px;color:var(--warn);display:flex;gap:8px;align-items:center' }, h('i', { class: 'dot' }), 'Не угадал · ' + rv.miss.length), rv.miss.length ? list(rv.miss) : h('span', { class: 'muted', text: 'Все слова угаданы' })));
-  if (rv.miss.length) box.append(h('button', { class: 'btn primary big', onclick: () => { rv = { mode: 'missed', queue: shuffle(rv.miss.slice()), pos: 0, shown: false, got: [], miss: [] }; renderReview(); } }, 'Прогнать не угаданные · ' + rv.miss.length));
+  if (rv.miss.length) box.append(h('button', { class: 'btn primary big', onclick: () => { rv = { mode: 'missed', quick: rv.mode === 'quick' || rv.quick, queue: shuffle(rv.miss.slice()), pos: 0, shown: false, got: [], miss: [] }; renderReview(); } }, 'Прогнать не угаданные · ' + rv.miss.length));
   const more = words.filter(isDue).length;
   if (rv.mode === 'quick' && more && !rv.miss.length) box.append(h('button', { class: 'btn primary big', onclick: () => { startRound('quick'); renderReview(); } }, 'Ещё ' + Math.min(QUICK, more) + ' ' + plural(Math.min(QUICK, more), 'карточка', 'карточки', 'карточек')));
-  box.append(h('button', { class: 'btn big', onclick: () => { startRound('due'); renderReview(); } }, 'Готово'));
+  const short = rv.mode === 'quick' || rv.quick || rv.mode === 'book';
+  box.append(h('button', { class: 'btn big', onclick: () => { startRound('due'); if (short) { rv = null; show('Lib'); } else renderReview(); } }, 'Готово'));
 }
 document.addEventListener('keydown', e => {
   if (current !== 'Review' || !rv || rv.pos >= rv.queue.length || /INPUT|TEXTAREA|SELECT/.test(e.target instanceof Element ? e.target.tagName : '')) return;
@@ -1448,8 +1480,7 @@ function askTheme() {
   if (night && S.theme !== 'night') { q = 'Включить ночную тему?'; apply = () => { S.dayTheme = S.theme; S.theme = 'night'; }; }
   else if (morning && S.theme === 'night' && S.dayTheme) { q = 'Вернуть дневную тему?'; apply = () => { S.theme = S.dayTheme; S.dayTheme = ''; }; }
   if (!q || LS.get('lr_themeask', '') === key || current !== 'Reader') return;
-  LS.set('lr_themeask', key);
-  const bar = $('#askBar'), close = () => { bar.classList.remove('on'); clearTimeout(askT); };
+  const bar = $('#askBar'), close = () => { LS.set('lr_themeask', key); bar.classList.remove('on'); clearTimeout(askT); };
   bar.replaceChildren(h('span', { text: q }),
     h('button', { class: 'ab-yes', onclick: () => { apply(); saveS(); applyReader(); setTimeout(() => { try { rendition.getContents().forEach(c => underlineSaved(c)); } catch (e) {} }, 400); close(); } }, 'Да'),
     h('button', { class: 'ab-no', onclick: () => { if (!night) { S.dayTheme = ''; saveS(); } close(); } }, 'Нет')); // утром «Нет» — больше не предлагать вернуть

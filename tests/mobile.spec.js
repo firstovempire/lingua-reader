@@ -213,3 +213,19 @@ test('библиотека: «Пора повторить» запускает �
   await expect(page.locator('#revBox header')).toContainText('1 из 5');
   expect(errors).toEqual([]);
 });
+
+test('статистика книги: прогресс, слова из книги и лексика', async ({ browser }, info) => {
+  const { page, errors } = await phone(browser, SIZES[0]);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Статистика «Pride and Prejudice»' }).click();
+  const m = page.locator('#modalBody');
+  await expect(m).toContainText('Прочитано23%');
+  await expect(m).toContainText('В словаре1');
+  await expect(m).toContainText('Частые слова');
+  await expect(m).not.toContainText('null');
+  await info.attach('статистика', { body: await page.screenshot(), contentType: 'image/png' });
+  await m.getByRole('button', { name: 'Повторить слова из книги' }).click();
+  await expect(page.locator('#sReview')).toHaveClass(/on/);
+  await expect(page.locator('.rv-card')).toContainText('countenance');
+  expect(errors).toEqual([]);
+});
