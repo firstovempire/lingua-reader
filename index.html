@@ -46,7 +46,8 @@ button{cursor:pointer}
 a{color:var(--accent)}
 svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none;display:block}
 .vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-.screen{position:absolute;inset:0;display:none;flex-direction:column;background:var(--bg)}
+/* fixed, а не absolute: экран занимает только видимую часть окна, нижняя панель браузера на телефоне его не перекрывает */
+.screen{position:fixed;inset:0;display:none;flex-direction:column;background:var(--bg)}
 .screen.on{display:flex}
 body.tabs .screen.on{animation:scrIn .2s ease-out}
 @keyframes scrIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
@@ -153,10 +154,10 @@ body[data-theme=night] #viewer svg{mix-blend-mode:screen}
 body[data-theme=sepia]{--saved-ul:#5E9C84} body[data-theme=night]{--saved-ul:#4E8C77}
 
 /* ---------- translation sheet ---------- */
-#sheet{position:fixed;z-index:30;left:0;right:0;bottom:0;background:var(--card);border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.16);transform:translateY(110%);transition:transform .26s cubic-bezier(.2,.8,.3,1),max-height .26s ease;max-height:52vh;display:flex;flex-direction:column}
+#sheet{position:fixed;z-index:30;left:0;right:0;bottom:0;background:var(--card);border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.16);transform:translateY(calc(100% + 48px));transition:transform .26s cubic-bezier(.2,.8,.3,1),max-height .26s ease;max-height:52vh;display:flex;flex-direction:column}
 #sheet.open{transform:none}
 /* шторка сверху — когда слово в нижней половине экрана, чтобы не закрывать текст под пальцем */
-#sheet.top{top:0;bottom:auto;border-radius:0 0 22px 22px;box-shadow:0 10px 30px rgba(0,0,0,.16);transform:translateY(-110%)}
+#sheet.top{top:0;bottom:auto;border-radius:0 0 22px 22px;box-shadow:0 10px 30px rgba(0,0,0,.16);transform:translateY(calc(-100% - 48px))}
 #sheet.top.open{transform:none}
 #sheet.top .grab{order:2}
 #sheet.top #sheetBody{padding:calc(var(--safe-t) + 16px) 22px 4px}
@@ -211,7 +212,7 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 #scrim{position:fixed;inset:0;z-index:40;background:rgba(20,18,15,.28);opacity:0;pointer-events:none;transition:opacity .2s}
 #scrim.on{opacity:1;pointer-events:auto}
 #scrim.clear{background:transparent}
-#modal{position:fixed;z-index:41;left:0;right:0;bottom:0;background:var(--card);border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.18);transform:translateY(110%);transition:transform .26s cubic-bezier(.2,.8,.3,1);max-height:calc(100dvh - var(--safe-t) - 60px);display:flex;flex-direction:column;overflow:hidden}
+#modal{position:fixed;z-index:41;left:0;right:0;bottom:0;background:var(--card);border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.18);transform:translateY(calc(100% + 48px));transition:transform .26s cubic-bezier(.2,.8,.3,1);max-height:calc(100dvh - var(--safe-t) - 60px);display:flex;flex-direction:column;overflow:hidden}
 #modal.open{transform:none}
 #modal.tall{height:calc(100dvh - var(--safe-t) - 110px)}
 #modal .grab{flex:none;height:26px;display:flex;align-items:center;justify-content:center}
@@ -271,6 +272,8 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 .rv-hint.no{color:var(--warn)} .rv-hint.no span{align-items:flex-start}
 .rv-hint.ok{color:var(--accent)} .rv-hint.ok span{align-items:flex-end}
 .rv-hint b{font-size:15px} .rv-hint small{font-size:12px;color:var(--muted)}
+/* невысокий экран телефона: карточка и подсказки свайпа должны помещаться над нижним меню */
+@media (max-height:700px) and (max-width:899px){#revBox{gap:10px!important}.rv-card{min-height:200px;padding:30px 16px 16px;gap:10px}.rv-word{font-size:28px}.rv-tr{font-size:24px}.rv-sent{font-size:16px;line-height:1.45}.rv-hint{min-height:40px}.rv-hint svg{width:36px;height:30px}}
 .rv-ok{width:64px;height:64px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center}
 
 /* ---------- профиль ---------- */
@@ -447,6 +450,9 @@ body[data-theme=night] .cat-ad{color:#FBF2D6}
 .lg-rep.anim em.now u{color:var(--accent-ink);transform:translateY(-3px)}
 .lg-rep.anim em.now u::before{opacity:1}
 @media (max-height:760px) and (max-width:899px){.wrap.lg{gap:14px;padding-top:0}.lg-h{font-size:24px}.lg-path li{padding-bottom:14px}.lg-b{gap:6px}.lg-books img,.lg-epub{max-width:46px}.lg-epub{font-size:9px}.lg-demo p{padding:10px 14px 16px}.lg-vs{padding:7px 14px}}
+/* телефон с панелями браузера: видно ~550–700px по высоте — заставка должна помещаться целиком вместе с кнопкой */
+@media (max-height:700px) and (max-width:899px){.wrap.lg{gap:10px}.logo{width:32px;height:32px}.lw{font-size:20px}.lg-h{font-size:22px}.lg-sub{display:none}.lg-path li{padding-bottom:10px}.lg-b>b{font-size:15px;line-height:26px}.lg-n{width:26px;height:26px;font-size:14px;line-height:26px}.lg-path li:not(:last-child)::before{left:12px;top:30px}.lg-books img,.lg-epub{max-width:38px}.lg-epub{font-size:8px}.lg-demo p{font-size:16px;padding:8px 12px 12px}.lg-vs{padding:5px 12px}.lg-vs strong{font-size:16px}.lg-rep u{width:30px;height:30px;font-size:14px}.lg-rep::before,.lg-rep::after{top:14px}.lg-rep em{font-size:11px;gap:2px}.lg-cta{padding-top:8px;gap:4px}.lg-cta .btn.big{min-height:48px}}
+@media (max-height:520px) and (max-width:899px){.lg-h{font-size:19px}.lg-books{display:none}.lg-demo p{font-size:15px;padding:6px 10px 8px}.lg-vs{padding:3px 10px}.lg-vs strong{font-size:15px}}
 @media (max-width:350px){.lg-sub,.lg-hand{display:none}.lg-path li{gap:10px}.lg-demo p{font-size:13.5px;padding-left:10px;padding-right:10px}.lg-vs{padding-left:10px;padding-right:10px}.lg-vs{gap:6px}.lg-vs span{width:56px;font-size:11px}.lg-vs s{font-size:11.5px}.lg-vs strong{font-size:15px}}
 @media (min-width:900px){
   .wrap.lg{max-width:1080px;gap:34px}

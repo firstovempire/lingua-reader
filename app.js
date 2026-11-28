@@ -861,7 +861,9 @@ function updProgress(loc) {
 function savePos(loc) {
   if (!curBook || hold || !loc || !loc.start || !loc.start.cfi) return;
   const live = books.find(x => x.id === curBook.id); if (live) curBook = live;
-  curBook.cfi = loc.start.cfi; curBook.lastRead = Date.now();
+  // время обновляем, только если место правда сдвинулось: иначе старая страница на проснувшемся телефоне перебила бы более свежее место с другого устройства
+  if (curBook.cfi !== loc.start.cfi) curBook.lastRead = Date.now();
+  curBook.cfi = loc.start.cfi;
   if (locReady && book) { try { const p = book.locations.percentageFromCfi(loc.start.cfi); if (p != null) curBook.pct = p; } catch (e) {} }
   clearTimeout(progT); progT = setTimeout(() => { progT = null; saveBooks(); }, 600);
 }
@@ -1400,7 +1402,7 @@ async function afterLogin() {
   }
   show('Lib'); $('#bookList').replaceChildren(h('li', { class: 'empty', style: 'display:block;border:0' }, h('span', { class: 'spin' }), '  Загружаю библиотеку…'));
   const pulling = pull();
-  try { await withTimeout(pulling, 12000); } catch (e) { console.warn(e); pulling.then(() => { if (current === 'Lib') renderLib(); updBadge(); }).catch(() => {}); toast('Нет связи с сервером — показываю сохранённое на устройстве', 4000); }
+  try { await withTimeout(pulling, 12000); lastPull = Date.now(); } catch (e) { console.warn(e); pulling.then(() => { if (current === 'Lib') renderLib(); updBadge(); }).catch(() => {}); toast('Нет связи с сервером — показываю сохранённое на устройстве', 4000); }
   try { const r = await withTimeout(sb.rpc('get_key_status'), 8000); keyLast4 = (r.data && r.data[0] && r.data[0].last4) || ''; } catch (e) {}
   applyTheme(); ensureUploads();
   nextAfterLogin();
@@ -1432,6 +1434,31 @@ async function boot() {
   if (qs.get('code')) $('#loginMsg').replaceChildren(h('div', { class: 'muted' }, h('span', { class: 'spin' }), '  Входим…'));
 }
 addEventListener('online', () => flush());
+/* --- вернулись на вкладку: забираем свежее с сервера. Телефон держит сайт в фоне сутками, и без этого показывал бы старое --- */
+let lastPull = Date.now(), resyncing = false;
+async function resync() {
+  if (!CLOUD || !user || !user.email || loggedFor !== user.id || resyncing || Date.now() - lastPull < 15000) return;
+  resyncing = true; saveNow();
+  const rd = current === 'Reader' && curBook && rendition ? { id: curBook.id, cfi: curBook.cfi, t: curBook.lastRead || 0, r: rendition } : null;
+  try { await withTimeout(pull(), 12000); lastPull = Date.now(); }
+  catch (e) { console.warn('resync', e); return; }
+  finally { resyncing = false; }
+  updBadge();
+  if (current === 'Lib') renderLib();
+  else if (current === 'Words') renderWords();
+  if (current !== 'Reader') applyTheme();
+  // в этой же книге на другом устройстве прочитано дальше — встаём туда
+  if (rd && current === 'Reader' && rendition === rd.r) {
+    const live = books.find(x => x.id === rd.id);
+    if (live && live.cfi && live.cfi !== rd.cfi && (live.lastRead || 0) > rd.t) {
+      curBook = live; hold = null;
+      try { await rendition.display(live.cfi); toast('Открыл место, где вы остановились на другом устройстве', 3500); } catch (e) {}
+    }
+  }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') resync(); });
+addEventListener('pageshow', e => { if (e.persisted) resync(); });
+addEventListener('focus', () => resync());
 const saveNow = () => { if (progT) { clearTimeout(progT); progT = null; saveBooks(); } };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { saveNow(); flush(); } });
 addEventListener('pagehide', saveNow);
