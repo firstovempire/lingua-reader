@@ -1,0 +1,159 @@
+@charset "utf-8";
+@namespace epub "http://www.idpf.org/2007/ops";
+
+/* All dedications */
+section[epub|type~="dedication"]{
+	text-align: center;
+}
+
+section[epub|type~="dedication"] > *{
+	display: inline-block;
+	margin: auto;
+	margin-top: 3em;
+	max-width: 80%;
+}
+
+@supports(display: flex){
+	section[epub|type~="dedication"]{
+		align-items: center;
+		box-sizing: border-box;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		min-height: calc(98vh - 3em);
+		padding-top: 3em;
+	}
+
+	section[epub|type~="dedication"] > *{
+		margin: 0;
+	}
+}
+/* End all dedications */
+
+section[epub|type~="dedication"] p{
+	font-variant: small-caps;
+}
+
+[epub|type~="z3998:signature"]{
+	font-variant: small-caps;
+	margin-top: 2em;
+	text-align: right;
+}
+
+#chapter-27 > blockquote:nth-of-type(5) > blockquote > blockquote{
+	text-align: center;
+	text-transform: uppercase;
+}
+
+header p{
+	font-variant: small-caps;
+	margin: 1em;
+	text-indent: 0;
+}
+
+p.headline{
+	font-size: larger;
+}
+
+section[epub|type~="chapter"] blockquote[epub|type~="z3998:diary"]{
+	margin-top: 3em;
+}
+
+[epub|type~="z3998:valediction"] [epub|type~="z3998:signature"]{
+	font-style: normal;
+	font-variant: small-caps;
+	margin: 0;
+}
+
+[epub|type~="z3998:valediction"],
+[epub|type~="se:letter.dateline"]{
+	text-align: right;
+}
+
+[epub|type~="se:letter.dateline"] + *{
+	text-indent: 0;
+}
+
+p[epub|type~="z3998:valediction"]{
+	margin-top: 1em;
+}
+
+p[epub|type~="z3998:postscript"]{
+	margin-top: 1em;
+	text-indent: 0;
+}
+
+blockquote,
+blockquote[epub|type~="z3998:diary-entry"] + blockquote[epub|type~="z3998:diary-entry"],
+blockquote[epub|type~="z3998:letter"] > header + p{
+	margin: 0;
+}
+
+blockquote:last-child{
+	margin-bottom: 0;
+}
+
+blockquote[epub|type~="z3998:diary"] blockquote[epub|type~="z3998:diary-entry"]{
+	margin-left: 0;
+	margin-right: 0;
+}
+
+blockquote blockquote{
+	margin: 1em;
+}
+
+section[epub|type~="chapter"] > blockquote,
+blockquote[epub|type~="z3998:diary"] > header + blockquote,
+blockquote > header + *,
+blockquote[epub|type~="z3998:diary"] + *{
+	margin-top: 3em;
+}
+
+section[epub|type~="preface"]{
+	margin-top: 20vh;
+}
+
+blockquote[epub|type~="z3998:diary-entry"] + blockquote[epub|type~="z3998:diary-entry"]::before{
+	border-top: 1px solid;
+	content: "";
+	display: block;
+	height: 0;
+	margin: 1.5em auto;
+	width: 25%;
+}
+
+p[epub|type~="z3998:salutation"],
+p[epub|type~="z3998:salutation"] + p{
+	text-indent: 0;
+}
+
+[epub|type~="z3998:verse"] p{
+	text-align: initial;
+	text-indent: 0;
+}
+
+[epub|type~="z3998:verse"] p > span{
+	display: block;
+	padding-left: 1em;
+	text-indent: -1em;
+}
+
+[epub|type~="z3998:verse"] p > span + br{
+	display: none;
+}
+
+p span.i1{
+	padding-left: 2em;
+	text-indent: -1em;
+}
+
+#chapter-13 blockquote:nth-last-child(3) blockquote p:last-child{
+	font-variant: small-caps;
+	margin-top: 1em;
+	text-align: center;
+	text-indent: 0;
+}
+
+.telegram{
+	font-variant: all-small-caps;
+}

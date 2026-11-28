@@ -1,0 +1,274 @@
+@charset "utf-8";
+@namespace epub "http://www.idpf.org/2007/ops";
+
+footer{
+	margin-top: 1em;
+	text-align: right;
+}
+
+figure{
+	break-inside: avoid;
+	margin: 1em 2.5em;
+}
+
+figure img{
+	display: block;
+	margin: auto;
+	max-height: 100vh;
+	max-width: 100%;
+}
+
+figure.full-page{
+	break-after: page;
+	break-before: page;
+}
+
+figure.left{
+	float: left;
+	margin: .5em .5em .5em 0;
+	width: 45%;
+}
+
+figure.right{
+	float: right;
+	margin: .5em 0 .5em .5em;
+	width: 45%;
+}
+
+/* All epigraphs */
+[epub|type~="epigraph"]{
+	font-style: italic;
+	hyphens: none;
+	-epub-hyphens: none;
+}
+
+[epub|type~="epigraph"] cite{
+	font-style: normal;
+	font-variant: small-caps;
+	margin-top: 1em;
+}
+/* End all epigraphs */
+
+/* Epigraphs in section headers */
+article > header [epub|type~="epigraph"]{
+	display: inline-block;
+	margin: auto;
+	max-width: 80%;
+	text-align: initial;
+}
+
+@supports(display: table){
+	article > header [epub|type~="epigraph"]{
+		display: table;
+	}
+}
+/* End epigraphs in section headers */
+
+[epub|type~="z3998:poem"] p,
+[epub|type~="z3998:song"] p,
+[epub|type~="z3998:verse"] p{
+	text-align: initial;
+	text-indent: 0;
+}
+
+[epub|type~="z3998:poem"] p > span,
+[epub|type~="z3998:song"] p > span,
+[epub|type~="z3998:verse"] p > span{
+	display: block;
+	padding-left: 1em;
+	text-indent: -1em;
+}
+
+[epub|type~="z3998:poem"] p > span + br,
+[epub|type~="z3998:song"] p > span + br,
+[epub|type~="z3998:verse"] p > span + br{
+	display: none;
+}
+
+p span.i1{
+	padding-left: 2em;
+	text-indent: -1em;
+}
+
+[epub|type~="dedication"]{
+	font-variant: small-caps;
+	text-align: center;
+}
+
+[epub|type~="dedication"] b{
+	text-transform: uppercase;
+}
+
+/* Centered dedications */
+section[epub|type~="dedication"]{
+	text-align: center;
+}
+
+section[epub|type~="dedication"] > *{
+	display: inline-block;
+	margin: auto;
+	margin-top: 3em;
+	max-width: 80%;
+}
+
+@supports(display: flex){
+	section[epub|type~="dedication"]{
+		align-items: center;
+		box-sizing: border-box;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		min-height: calc(98vh - 3em);
+		padding-top: 3em;
+	}
+
+	section[epub|type~="dedication"] > *{
+		margin: 0;
+	}
+}
+/* End centered dedications */
+
+#the-tailor-of-gloucester-dedication{
+	min-height: auto;
+	padding-top: 0;
+}
+
+#the-tailor-of-gloucester-dedication,
+#the-tailor-of-gloucester-dedication *{
+	display: block;
+	max-width: none;
+}
+
+#the-tailor-of-gloucester-dedication > p:first-of-type{
+	font-variant: small-caps;
+}
+
+#the-tailor-of-gloucester-dedication > p:first-of-type + p{
+	text-indent: 0;
+}
+
+#the-tale-of-peter-rabbit > p > span{
+	display: block;
+	margin: .5em 3em;
+	text-indent: 0;
+}
+
+#the-tale-of-peter-rabbit span > span{
+	display: block;
+}
+
+#the-tale-of-peter-rabbit span > span:nth-child(1){
+	padding-left: 9em;
+}
+
+#the-tale-of-peter-rabbit span > span:nth-child(2){
+	padding-left: 6em;
+}
+
+#the-tale-of-peter-rabbit span > span:nth-child(3){
+	padding-left: 3em;
+}
+
+#the-tailor-of-gloucester > [epub|type~="dedication"]{
+	font-variant: normal;
+	text-align: initial;
+}
+
+#the-tailor-of-gloucester-text > blockquote:last-of-type{
+	font-size: smaller;
+	font-variant: all-small-caps;
+	text-align: center;
+}
+
+#the-tailor-of-gloucester-dedication > footer{
+	margin-top: 1em; /* Correct style overridden by dedication boilerplate */
+}
+
+#the-tale-of-samuel-whiskers-text > p:last-child{
+	text-align: center;
+	text-indent: 0;
+}
+
+/* non-full-page image widths */
+img[epub|type~="se:image.color-depth.black-on-transparent"]{
+	width: 100%;
+}
+
+#illustration-325 > img{
+	width: 60%;
+}
+
+#illustration-326 > img,
+#illustration-401 > img,
+#illustration-471 > img,
+#illustration-472 > img,
+#illustration-476 > img,
+#illustration-479 > img,
+#illustration-480 > img,
+#illustration-481 > img,
+#illustration-487 > img,
+#illustration-488 > img,
+#illustration-491 > img,
+#illustration-502 > img,
+#illustration-504 > img,
+#illustration-506 > img,
+#illustration-511 > img,
+#illustration-514 > img,
+#illustration-516 > img,
+#illustration-519 > img,
+#illustration-520 > img{
+	width: 70%;
+}
+
+#illustration-306 > img,
+#illustration-322 > img,
+#illustration-323 > img,
+#illustration-335 > img,
+#illustration-384 > img,
+#illustration-393 > img,
+#illustration-477 > img,
+#illustration-483 > img,
+#illustration-484 > img,
+#illustration-486 > img,
+#illustration-493 > img,
+#illustration-495 > img,
+#illustration-497 > img,
+#illustration-498 > img,
+#illustration-501 > img,
+#illustration-507 > img,
+#illustration-508 > img,
+#illustration-509 > img,
+#illustration-512 > img,
+#illustration-515 > img,
+#illustration-522 > img,
+#illustration-523 > img{
+	width: 80%;
+}
+
+#illustration-311 > img,
+#illustration-319 > img,
+#illustration-320 > img,
+#illustration-328 > img,
+#illustration-341 > img,
+#illustration-353 > img,
+#illustration-387 > img,
+#illustration-388 > img,
+#illustration-392 > img,
+#illustration-395 > img,
+#illustration-397 > img,
+#illustration-399 > img,
+#illustration-400 > img,
+#illustration-408 > img,
+#illustration-409 > img,
+#illustration-412 > img,
+#illustration-469 > img,
+#illustration-517 > img,
+#illustration-527 > img{
+	width: 90%;
+}
+
+#illustration-190 > img,
+#illustration-355 > img{
+	margin-top: 3em;
+	width: 5em;
+}

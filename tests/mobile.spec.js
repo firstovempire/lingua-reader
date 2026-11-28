@@ -229,3 +229,61 @@ test('статистика книги: прогресс, слова из кни�
   await expect(page.locator('.rv-card')).toContainText('countenance');
   expect(errors).toEqual([]);
 });
+
+test('книга каталога: открывается по главам, со стилями и картинками, целиком сохраняется фоном и читается без сети', async ({ browser }) => {
+  test.setTimeout(120000);
+  const id = 'lewis-carroll_alices-adventures-in-wonderland_john-tenniel';
+  const seed = Object.assign({}, SEED, { lr_tried: true, lr_books: [{ id: 'cat-' + id, cat: id, title: 'Alice', author: 'Lewis Carroll', added: T0, pct: 0, lastRead: T0 + 1, up: true }] });
+  const db = new FakeDB();
+  const context = await browser.newContext({ viewport: SIZES[1], hasTouch: true, isMobile: true, serviceWorkers: 'allow' });
+  await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+  await attach(context, db);
+  await context.addInitScript(seed => { if (localStorage.getItem('__seeded')) return; localStorage.setItem('__seeded', '1'); for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, JSON.stringify(v)); }, seed);
+  const page = await context.newPage();
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  const got = []; context.on('request', r => got.push(r.url()));
+  await page.goto('/');
+  await page.waitForFunction(() => navigator.serviceWorker.controller, null, { timeout: 15000 }).catch(() => {});
+  await page.reload();
+  // стили книги применились и картинки загрузились (иначе иллюстрированные книги пустые)
+  const looks = async () => {
+    await page.evaluate(() => window.__lr.rendition.display('text/chapter-1.xhtml'));
+    return page.frameLocator('#viewer iframe').first().locator('body').evaluate(async body => {
+      const d = body.ownerDocument; const imgs = [...d.images];
+      await Promise.all(imgs.map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
+      const rules = [...d.styleSheets].reduce((n, sh) => { try { return n + sh.cssRules.length; } catch (e) { return n; } }, 0);
+      return { rules, imgs: imgs.length, okImgs: imgs.filter(i => i.naturalWidth > 0).length };
+    });
+  };
+  await page.locator('#contBox button', { hasText: 'Читать' }).click();
+  await expect(page.locator('#loading')).toBeHidden({ timeout: 30000 });
+  let L = await looks();
+  expect(L.rules, 'стили книги загрузились').toBeGreaterThan(5);
+  expect(L.imgs, 'в первой главе есть картинка').toBeGreaterThan(0);
+  expect(L.okImgs, 'картинки видны').toBe(L.imgs);
+  expect(got.some(u => /catalog\/books\/.+\/text\/chapter-1\.xhtml/.test(u)), 'главы грузятся по одной').toBe(true);
+  expect(got.some(u => /\.epub$/.test(u)), 'целый EPUB не качается').toBe(false);
+  await expect.poll(() => page.evaluate(id => JSON.parse(localStorage.getItem('lr_catsaved') || '{}')[id], id), { timeout: 90000 }).toBe(true);
+  // без сети: книга открывается из сохранённого, со стилями и картинками
+  await page.evaluate(() => document.querySelector('#rBack').click());
+  await context.setOffline(true);
+  await page.locator('#contBox button', { hasText: 'Читать' }).click();
+  await expect(page.locator('#loading')).toBeHidden({ timeout: 30000 });
+  L = await looks();
+  expect(L.rules).toBeGreaterThan(5);
+  expect(L.okImgs).toBe(L.imgs);
+  expect(errors).toEqual([]);
+});
+
+test('книгу каталога обновили на сайте — старые сохранённые главы убираются перед открытием', async ({ browser }) => {
+  const id = 'jane-austen_pride-and-prejudice';
+  const { page, errors } = await phone(browser, SIZES[1], { seed: Object.assign({}, SEED, { lr_tried: true, lr_catsaved: { [id]: true }, lr_catv: { [id]: 'old-version' } }) });
+  await page.goto('/');
+  await page.evaluate(async dir => { const c = await caches.open('lr-books'); await c.put(dir + 'epub/text/chapter-1.xhtml', new Response('старая глава')); }, 'catalog/books/' + id + '/');
+  await page.locator('#contBox button', { hasText: 'Читать' }).click();
+  await expect(page.locator('#loading')).toBeHidden({ timeout: 30000 });
+  const st = await page.evaluate(async dir => ({ old: !!(await (await caches.open('lr-books')).match(dir + 'epub/text/chapter-1.xhtml').then(r => r && r.text()).then(t => t === 'старая глава')), v: JSON.parse(localStorage.getItem('lr_catv'))[location.pathname && 'jane-austen_pride-and-prejudice'] }), 'catalog/books/' + id + '/');
+  expect(st.old, 'старая глава удалена').toBe(false);
+  expect(st.v).not.toBe('old-version');
+  expect(errors).toEqual([]);
+});

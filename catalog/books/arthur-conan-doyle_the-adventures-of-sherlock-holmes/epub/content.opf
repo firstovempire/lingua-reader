@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" dir="ltr" prefix="rdf: http://www.w3.org/1999/02/22-rdf-syntax-ns#" unique-identifier="uid" version="3.0" xml:lang="en-US">
+	<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+		<dc:identifier id="uid">https://standardebooks.org/ebooks/arthur-conan-doyle/the-adventures-of-sherlock-holmes</dc:identifier>
+		<dc:date>2018-05-08T02:24:50Z</dc:date>
+		<meta property="dcterms:modified">2018-05-08T02:24:50Z</meta>
+		<dc:rights>The source text and artwork in this ebook are believed to be in the United States public domain; that is, they are believed to be free of copyright restrictions in the United States. They may still be copyrighted in other countries, so users located outside of the United States must check their local laws before using this ebook. The creators of, and contributors to, this ebook dedicate their contributions to the worldwide public domain via the terms in the [CC0 1.0 Universal Public Domain Dedication](https://creativecommons.org/publicdomain/zero/1.0/).</dc:rights>
+		<meta property="rdf:type">http://schema.org/Book</meta>
+		<dc:publisher id="publisher">Standard Ebooks</dc:publisher>
+		<meta property="file-as" refines="#publisher">Standard Ebooks</meta>
+		<link href="https://standardebooks.org/" refines="#publisher" rel="schema:url"/>
+		<meta property="role" refines="#publisher" scheme="marc:relators">bkd</meta>
+		<meta property="role" refines="#publisher" scheme="marc:relators">mdc</meta>
+		<meta property="role" refines="#publisher" scheme="marc:relators">pbl</meta>
+		<dc:contributor id="type-designer">The League of Moveable Type</dc:contributor>
+		<meta property="file-as" refines="#type-designer">League of Moveable Type, The</meta>
+		<link href="https://www.theleagueofmoveabletype.com/" refines="#type-designer" rel="schema:url"/>
+		<meta property="role" refines="#type-designer" scheme="marc:relators">tyd</meta>
+		<meta id="conformance-statement" property="dcterms:conformsTo">EPUB Accessibility 1.1 - WCAG 2.2 Level AA</meta>
+		<meta property="a11y:certifiedBy" refines="#conformance-statement">Standard Ebooks</meta>
+		<meta property="schema:accessMode">textual</meta>
+		<meta property="schema:accessModeSufficient">textual</meta>
+		<meta property="schema:accessibilityFeature">alternativeText</meta>
+		<meta property="schema:accessibilityFeature">displayTransformability</meta>
+		<meta property="schema:accessibilityFeature">readingOrder</meta>
+		<meta property="schema:accessibilityFeature">structuralNavigation</meta>
+		<meta property="schema:accessibilityFeature">tableOfContents</meta>
+		<meta property="schema:accessibilityFeature">unlocked</meta>
+		<meta property="schema:accessibilityHazard">none</meta>
+		<meta property="schema:accessibilitySummary">This publication conforms to WCAG 2.2 Level AA.</meta>
+		<dc:title id="title">The Adventures of Sherlock Holmes</dc:title>
+		<meta property="file-as" refines="#title">Adventures of Sherlock Holmes, The</meta>
+		<dc:subject id="subject-1">Holmes, Sherlock (Fictitious character)--Fiction</dc:subject>
+		<dc:subject id="subject-2">Private investigators--England--Fiction</dc:subject>
+		<dc:subject id="subject-3">Detective and mystery stories, English</dc:subject>
+		<meta property="authority" refines="#subject-1">LCSH</meta>
+		<meta property="term" refines="#subject-1">Unknown</meta>
+		<meta property="authority" refines="#subject-2">LCSH</meta>
+		<meta property="term" refines="#subject-2">sh2008109474</meta>
+		<meta property="authority" refines="#subject-3">LCSH</meta>
+		<meta property="term" refines="#subject-3">sh85037269</meta>
+		<meta property="schema:genre">Fiction</meta>
+		<meta property="schema:genre">Mystery</meta>
+		<meta property="schema:genre">Shorts</meta>
+		<meta property="schema:additionalType">http://schema.org/Collection</meta>
+		<meta id="collection-1" property="belongs-to-collection">Sherlock Holmes</meta>
+		<meta property="collection-type" refines="#collection-1">series</meta>
+		<meta property="group-position" refines="#collection-1">3</meta>
+		<meta id="collection-2" property="belongs-to-collection">Haycraft-Queen Cornerstones</meta>
+		<meta property="collection-type" refines="#collection-2">set</meta>
+		<meta id="collection-3" property="belongs-to-collection">The Crime Writers’ Association Top 100 Crime Novels of All Time</meta>
+		<meta property="collection-type" refines="#collection-3">set</meta>
+		<meta property="group-position" refines="#collection-3">21</meta>
+		<meta id="collection-4" property="belongs-to-collection">Mystery Writers of America Top 100 Mysteries of All Time</meta>
+		<meta property="collection-type" refines="#collection-4">set</meta>
+		<meta property="group-position" refines="#collection-4">3</meta>
+		<meta property="schema:abstract">The world’s first consulting detective investigates a variety of intriguing cases in the first Holmes short story collection.</meta>
+		<dc:description>
+			&lt;p&gt;&lt;i&gt;The Adventures of Sherlock Holmes&lt;/i&gt; was the first collection of &lt;a href="https://standardebooks.org/collections/sherlock-holmes"&gt;Sherlock Holmes&lt;/a&gt; short stories &lt;a href="https://standardebooks.org/ebooks/arthur-conan-doyle"&gt;Conan Doyle&lt;/a&gt; published in book form, following the popular success of the novels &lt;a href="https://standardebooks.org/ebooks/arthur-conan-doyle/a-study-in-scarlet"&gt;&lt;i&gt;A Study in Scarlet&lt;/i&gt;&lt;/a&gt; and &lt;a href="https://standardebooks.org/ebooks/arthur-conan-doyle/the-sign-of-the-four"&gt;&lt;i&gt;The Sign of the Four&lt;/i&gt;&lt;/a&gt;, which introduced the characters of Dr. John Watson and the austere analytical detective Sherlock Holmes.&lt;/p&gt;
+			&lt;p&gt;The collection contains twelve stories, all originally published in &lt;i&gt;The Strand Magazine&lt;/i&gt; between July 1891 and June 1892. Narrated by the first-person voice of Dr. Watson, they involve him and Holmes solving a series of mysterious cases.&lt;/p&gt;
+			&lt;p&gt;Some of the more well-known stories in this collection are “A Scandal in Bohemia,” in which Holmes comes up against a worthy opponent in the form of Irene Adler, whom Holmes forever after admiringly refers to as &lt;em&gt;the&lt;/em&gt; woman; “The Redheaded League,” involving a bizarre scheme offering a well-paid sinecure to redheaded men; and “The Speckled Band,” in which Holmes and Watson save a young woman from a terrible death.&lt;/p&gt;
+		</dc:description>
+		<dc:language>en-GB</dc:language>
+		<dc:source>https://www.gutenberg.org/ebooks/1661</dc:source>
+		<dc:source>https://archive.org/details/adventuresofsher001892doyl</dc:source>
+		<meta property="schema:wordCount">104582</meta>
+		<meta property="schema:educationalLevel">80.51</meta>
+		<link href="https://en.wikipedia.org/wiki/The_Adventures_of_Sherlock_Holmes" rel="schema:sameAs"/>
+		<meta id="vcs-repository" property="schema:workExample">schema:workExample</meta>
+		<meta property="rdf:type" refines="#vcs-repository">http://schema.org/SoftwareSourceCode</meta>
+		<link href="https://github.com/standardebooks/arthur-conan-doyle_the-adventures-of-sherlock-holmes" refines="#vcs-repository" rel="schema:codeRepository"/>
+		<dc:creator id="author">Arthur Conan Doyle</dc:creator>
+		<meta property="file-as" refines="#author">Doyle, Arthur Conan</meta>
+		<meta property="schema:alternateName" refines="#author">Arthur Ignatius Conan Doyle</meta>
+		<link href="https://en.wikipedia.org/wiki/Arthur_Conan_Doyle" refines="#author" rel="schema:sameAs"/>
+		<link href="https://id.loc.gov/authorities/names/n79082292.html" refines="#author" rel="schema:sameAs"/>
+		<meta property="role" refines="#author" scheme="marc:relators">aut</meta>
+		<dc:contributor id="artist">Thomas Eakins</dc:contributor>
+		<meta property="file-as" refines="#artist">Eakins, Thomas</meta>
+		<meta property="schema:alternateName" refines="#artist">Thomas Cowperthwait Eakins</meta>
+		<link href="https://en.wikipedia.org/wiki/Thomas_Eakins" refines="#artist" rel="schema:sameAs"/>
+		<link href="https://id.loc.gov/authorities/names/n80061185.html" refines="#artist" rel="schema:sameAs"/>
+		<meta property="role" refines="#artist" scheme="marc:relators">art</meta>
+		<dc:contributor id="transcriber-1">Anonymous</dc:contributor>
+		<meta property="file-as" refines="#transcriber-1">Anonymous</meta>
+		<meta property="role" refines="#transcriber-1" scheme="marc:relators">trc</meta>
+		<dc:contributor id="transcriber-2">Jose Menendez</dc:contributor>
+		<meta property="file-as" refines="#transcriber-2">Menendez, Jose</meta>
+		<meta property="role" refines="#transcriber-2" scheme="marc:relators">trc</meta>
+		<dc:contributor id="producer-1">David Grigg</dc:contributor>
+		<meta property="file-as" refines="#producer-1">Grigg, David</meta>
+		<link href="https://thegriggs.org/david/" refines="#producer-1" rel="schema:url"/>
+		<meta property="role" refines="#producer-1" scheme="marc:relators">bkp</meta>
+		<meta property="role" refines="#producer-1" scheme="marc:relators">blw</meta>
+		<meta property="role" refines="#producer-1" scheme="marc:relators">cov</meta>
+		<meta property="role" refines="#producer-1" scheme="marc:relators">mrk</meta>
+		<meta property="role" refines="#producer-1" scheme="marc:relators">pfr</meta>
+		<meta property="role" refines="#producer-1" scheme="marc:relators">tyg</meta>
+		<dc:contributor id="producer-2">Alex Cabal</dc:contributor>
+		<meta property="file-as" refines="#producer-2">Cabal, Alex</meta>
+		<link href="https://alexcabal.com/" refines="#producer-2" rel="schema:url"/>
+		<meta property="role" refines="#producer-2" scheme="marc:relators">pfr</meta>
+	</metadata>
+	<manifest>
+		<item href="css/core.css" id="core.css" media-type="text/css"/>
+		<item href="css/local.css" id="local.css" media-type="text/css"/>
+		<item href="css/se.css" id="se.css" media-type="text/css"/>
+		<item href="images/cover.svg" id="cover.svg" media-type="image/svg+xml" properties="cover-image"/>
+		<item href="images/logo.svg" id="logo.svg" media-type="image/svg+xml"/>
+		<item href="images/titlepage.svg" id="titlepage.svg" media-type="image/svg+xml"/>
+		<item href="text/a-case-of-identity.xhtml" id="a-case-of-identity.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/a-scandal-in-bohemia.xhtml" id="a-scandal-in-bohemia.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/colophon.xhtml" id="colophon.xhtml" media-type="application/xhtml+xml" properties="svg"/>
+		<item href="text/imprint.xhtml" id="imprint.xhtml" media-type="application/xhtml+xml" properties="svg"/>
+		<item href="text/the-adventure-of-the-beryl-coronet.xhtml" id="the-adventure-of-the-beryl-coronet.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-adventure-of-the-blue-carbuncle.xhtml" id="the-adventure-of-the-blue-carbuncle.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-adventure-of-the-copper-beeches.xhtml" id="the-adventure-of-the-copper-beeches.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-adventure-of-the-engineers-thumb.xhtml" id="the-adventure-of-the-engineers-thumb.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-adventure-of-the-noble-bachelor.xhtml" id="the-adventure-of-the-noble-bachelor.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-adventure-of-the-speckled-band.xhtml" id="the-adventure-of-the-speckled-band.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-boscombe-valley-mystery.xhtml" id="the-boscombe-valley-mystery.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-five-orange-pips.xhtml" id="the-five-orange-pips.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-man-with-the-twisted-lip.xhtml" id="the-man-with-the-twisted-lip.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-redheaded-league.xhtml" id="the-redheaded-league.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/titlepage.xhtml" id="titlepage.xhtml" media-type="application/xhtml+xml" properties="svg"/>
+		<item href="text/uncopyright.xhtml" id="uncopyright.xhtml" media-type="application/xhtml+xml"/>
+		<item href="toc.xhtml" id="toc.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+	</manifest>
+	<spine>
+		<itemref idref="titlepage.xhtml"/>
+		<itemref idref="imprint.xhtml"/>
+		<itemref idref="a-scandal-in-bohemia.xhtml"/>
+		<itemref idref="the-redheaded-league.xhtml"/>
+		<itemref idref="a-case-of-identity.xhtml"/>
+		<itemref idref="the-boscombe-valley-mystery.xhtml"/>
+		<itemref idref="the-five-orange-pips.xhtml"/>
+		<itemref idref="the-man-with-the-twisted-lip.xhtml"/>
+		<itemref idref="the-adventure-of-the-blue-carbuncle.xhtml"/>
+		<itemref idref="the-adventure-of-the-speckled-band.xhtml"/>
+		<itemref idref="the-adventure-of-the-engineers-thumb.xhtml"/>
+		<itemref idref="the-adventure-of-the-noble-bachelor.xhtml"/>
+		<itemref idref="the-adventure-of-the-beryl-coronet.xhtml"/>
+		<itemref idref="the-adventure-of-the-copper-beeches.xhtml"/>
+		<itemref idref="colophon.xhtml"/>
+		<itemref idref="uncopyright.xhtml"/>
+	</spine>
+</package>

@@ -1,0 +1,38 @@
+@charset "utf-8";
+@namespace epub "http://www.idpf.org/2007/ops";
+
+#the-redheaded-league blockquote:last-of-type{
+	font-variant: small-caps;
+	text-align: center;
+}
+
+ul{
+	list-style-type: none;
+	margin: 0;
+	padding: 0;
+}
+
+[epub|type~="se:letter.dateline"]{
+	margin-top: 1em;
+	text-align: right;
+}
+
+[epub|type~="z3998:letter"] header{
+	margin-bottom: 1em;
+	text-align: initial;
+}
+
+footer{
+	margin-top: 1em;
+	text-align: right;
+}
+
+[epub|type~="z3998:salutation"],
+[epub|type~="z3998:recipient"]{
+	font-variant: small-caps;
+	text-indent: 0;
+}
+
+[epub|type~="z3998:signature"]{
+	font-variant: small-caps;
+}

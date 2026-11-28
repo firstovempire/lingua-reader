@@ -1,0 +1,85 @@
+@charset "utf-8";
+@namespace epub "http://www.idpf.org/2007/ops";
+
+[epub|type~="z3998:song"] header p{
+	font-variant: small-caps;
+	text-align: center;
+}
+
+#chapter-1 span{
+	/* Allow line breaks for stylized word in small screens */
+	word-break: break-all;
+}
+
+#chapter-3 blockquote p{
+	font-variant: small-caps;
+	text-align: center;
+	text-indent: 0;
+}
+
+[epub|type~="z3998:song"] p{
+	text-align: initial;
+	text-indent: 0;
+}
+
+[epub|type~="z3998:song"] p > span{
+	display: block;
+	padding-left: 1em;
+	text-indent: -1em;
+}
+
+[epub|type~="z3998:song"] p > span + br{
+	display: none;
+}
+
+[epub|type~="z3998:song"] p + p{
+	margin-top: 1em;
+}
+
+p span.i1{
+	padding-left: 2em;
+	text-indent: -1em;
+}
+
+#chapter-12 blockquote:nth-of-type(2) p{
+	text-indent: 0;
+}
+
+#chapter-12 blockquote:nth-of-type(2) p span,
+#chapter-12 blockquote:nth-of-type(2) p:nth-of-type(odd) b{
+	font-variant: small-caps;
+}
+
+#chapter-12 blockquote:nth-of-type(2) p:nth-of-type(6){
+	text-align: center;
+}
+
+#chapter-12 blockquote:nth-of-type(2) p:nth-of-type(odd) b{
+	padding-top: 1em;
+	white-space: nowrap;
+}
+
+#chapter-12 blockquote:nth-of-type(2) p:first-of-type b{
+	padding: 0;
+}
+
+@supports(display: flex){
+	#chapter-12 blockquote:nth-of-type(2) p{
+		display: block;
+	}
+
+	#chapter-12 blockquote:nth-of-type(2) p:nth-of-type(odd){
+		display: flex;
+		justify-content: space-between;
+		margin-top: 1em;
+	}
+
+	#chapter-12 blockquote:nth-of-type(2) p span,
+	#chapter-12 blockquote:nth-of-type(2) p:nth-of-type(odd) b{
+		display: inline;
+	}
+
+	#chapter-12 blockquote:nth-of-type(2) p:nth-of-type(odd) b{
+		padding: 0;
+	}
+}
