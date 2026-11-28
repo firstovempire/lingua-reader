@@ -94,6 +94,8 @@ body.tabs #tabbar{display:grid}
 .lvl[aria-checked=true] b{background:var(--accent);color:var(--accent-ink)}
 .lvl span{display:flex;flex-direction:column;gap:2px}
 .lvl small{font-size:14px;color:var(--muted)}
+.wst{font-size:12px;color:var(--muted);margin-top:2px}
+.wst.ok{color:var(--accent)}
 /* онбординг на низком экране (панели браузера): кнопка внизу всегда видна, уровни плотнее */
 #lvlBtns{position:sticky;bottom:0;z-index:2;margin-top:auto;background:var(--bg);box-shadow:0 -16px 14px -6px var(--bg);padding:6px 0 calc(var(--safe-b) + 12px);margin-bottom:calc(-1 * (var(--safe-b) + 12px))}
 @media (max-height:700px){.lvl{padding:8px 12px}.lvl b{width:40px;height:40px;font-size:16px}#sLevel .title{font-size:24px!important}}
@@ -617,7 +619,7 @@ body[data-theme=night] .cat-ad{color:#FBF2D6}
 <!-- слова -->
 <section id="sWords" class="screen" aria-label="Слова">
   <div class="scroll"><div class="wrap" style="gap:14px">
-    <header style="display:flex;align-items:baseline;gap:10px"><h1 class="title">Слова</h1><span class="muted" id="wCount"></span></header>
+    <header style="display:flex;align-items:baseline;gap:10px"><h1 class="title">Слова</h1><span class="muted" id="wCount" style="flex:1"></span><button class="icobtn" id="wExport" aria-label="Выгрузить словарь (для Anki и таблиц)" title="Выгрузить словарь" style="align-self:center;display:none"><svg class="i" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg></button></header>
     <label style="display:flex;align-items:center;gap:10px;min-height:44px;padding:0 14px;border-radius:12px;background:var(--paper);border:1px solid var(--line);color:var(--muted)">
       <svg class="i" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       <span class="vh">Поиск по словам</span><input id="wSearch" type="search" placeholder="Найти слово" style="flex:1;border:0;background:transparent;font-size:16px;outline:none;min-height:42px">

@@ -6,7 +6,7 @@
 (() => {
 'use strict';
 
-const VER = 41; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 42; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -637,16 +637,20 @@ function renderCatalog() {
     h('p', { style: 'margin:-8px 0 -8px;font-size:13px;color:var(--muted)' }, (lv === 'all' ? 'Все уровни' : lv + ' · ' + (LEVELS.find(x => x[0] === lv) || ['', ''])[1].toLowerCase()) + ' · ' + list.length + ' ' + plural(list.length, 'книга', 'книги', 'книг'), S.level && lv === S.level ? h('b', { style: 'color:var(--accent);font-weight:600' }, ' · ваш уровень') : null),
     h('ul', { class: 'cat-list' }, items.length ? items : h('li', { class: 'muted', text: 'Нет книг этого уровня' })));
 }
+const catLoading = new Set(); // книги каталога, которые уже скачиваются: повторное нажатие не добавит вторую копию
 async function addFromCatalog(x, btn) {
-  if (books.some(b => b.cat === x.id)) return;
+  if (books.some(b => b.cat === x.id) || catLoading.has(x.id)) return;
+  catLoading.add(x.id);
   btn.disabled = true; btn.replaceChildren(h('span', { class: 'spin' }), ' Скачиваю…');
   try {
     const buf = await fetchBuf('catalog/' + x.id + '.epub', p => btn.replaceChildren(h('span', { class: 'spin' }), ' Скачиваю… ' + p + '%'));
     const nb = { id: 'cat-' + x.id, cat: x.id, title: x.title, author: x.author, cover: 'catalog/covers/' + x.id + '.jpg', added: Date.now(), up: true, pct: 0 };
     await files.put(nb.id, buf);
+    if (books.some(b => b.cat === x.id)) return;
     books.unshift(nb); saveBooks(); renderLib(); buzz(10);
     toast('Добавлено: ' + x.title); renderCatalog();
   } catch (e) { btn.disabled = false; btn.textContent = 'Повторить'; toast(navigator.onLine ? 'Не удалось скачать книгу. Попробуйте ещё раз.' : 'Нет интернета. Добавьте книгу, когда связь вернётся.', 4000); }
+  finally { catLoading.delete(x.id); }
 }
 $('#catBtn').onclick = openCatalog;
 
@@ -654,6 +658,7 @@ $('#catBtn').onclick = openCatalog;
 function renderWords() {
   const q = norm($('#wSearch').value).toLowerCase();
   $('#wCount').textContent = words.length ? words.length + ' сохранено' : '';
+  $('#wExport').style.display = words.length ? '' : 'none';
   const box = $('#wGroups'); box.innerHTML = '';
   if (!words.length) { box.append(h('div', { class: 'empty' }, h('div', { style: 'font-family:var(--serif);font-size:18px;color:var(--ink);margin-bottom:6px', text: 'Пока пусто' }), 'Коснитесь слова в книге и нажмите ★ — оно появится здесь.')); return; }
   const byBook = new Map();
@@ -663,13 +668,33 @@ function renderWords() {
     box.append(h('section', { class: 'wgroup' },
       h('h2', null, h('span', { 'aria-hidden': 'true', style: `width:18px;height:26px;border-radius:2px 4px 4px 2px;background:${COVER_COLORS[(b.title || '').length % COVER_COLORS.length]}` }), b.title, h('span', { style: 'font-weight:500;color:var(--muted)', text: '· ' + ws.length })),
       h('ul', { class: 'wlist' }, ws.map(w => h('li', null,
-        h('div', { class: 'w' }, h('span', { style: 'font-size:16px' }, h('b', { lang: 'en', text: w.w }), ' — ' + (w.tr || '')), h('span', { class: 'ctx', lang: 'en', text: w.s || '' })),
+        h('div', { class: 'w' }, h('span', { style: 'font-size:16px' }, h('b', { lang: 'en', text: w.w }), ' — ' + (w.tr || '')), h('span', { class: 'ctx', lang: 'en', text: w.s || '' }), h('span', { class: 'wst' + (wordState(w) === 'выучено' ? ' ok' : ''), text: wordState(w) })),
         h('button', { class: 'icobtn', 'aria-label': 'Произнести', onclick: () => speak(w.w) }, ico('speak', 18)),
         b.id ? h('button', { class: 'icobtn', 'aria-label': 'Открыть место в книге', onclick: () => openBook(b, w.cfi) }, ico('chev', 18)) : null,
         h('button', { class: 'icobtn', 'aria-label': 'Удалить слово', style: 'color:var(--muted)', onclick: () => { words = words.filter(x => x.id !== w.id); saveWords(); renderWords(); updBadge(); } }, ico('x', 16)))))));
   }
 }
 $('#wSearch').oninput = renderWords;
+// где слово в повторении: интервалы 1–3–7–21–60 дней, после пятого верного ответа — выучено
+function wordState(w) {
+  if ((w.box || 0) >= INTERVALS.length) return 'выучено';
+  const d = Math.ceil(((w.due || 0) - Date.now()) / DAY);
+  if (d <= 0) return 'пора повторить';
+  return 'повтор через ' + d + ' ' + plural(d, 'день', 'дня', 'дней');
+}
+// словарь файлом: таблица через табуляцию — Anki (Файл → Импорт) и Excel/Numbers открывают её как есть
+function exportWords() {
+  const cell = v => String(v || '').replace(/[\t\r\n]+/g, ' ').trim();
+  const rows = words.map(w => [w.w, w.tr, w.tc, w.s, w.st, (books.find(b => b.id === w.bookId) || {}).title, wordState(w)].map(cell).join('\t'));
+  const txt = ['#separator:tab', '#html:false', '#columns:' + ['English', 'Русский', 'Транскрипция', 'Предложение', 'Перевод предложения', 'Книга', 'Повторение'].join('\t'), ...rows, ''].join('\n');
+  const name = 'lingua-slova-' + new Date().toISOString().slice(0, 10) + '.txt';
+  const file = new File([txt], name, { type: 'text/plain' });
+  // телефон: системное «Поделиться» (сохранить в Файлы, отправить себе); компьютер — обычная загрузка
+  if (!isDesk() && navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Словарь Lingua Reader' }).catch(() => {}); return; }
+  const a = h('a', { href: URL.createObjectURL(file), download: name }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  toast('Словарь выгружен: ' + words.length + ' ' + plural(words.length, 'слово', 'слова', 'слов'));
+}
+$('#wExport').onclick = exportWords;
 
 /* ================= повторение (карточки) ================= */
 const INTERVALS = [1, 3, 7, 21, 60], SWIPE = 90;
@@ -869,7 +894,9 @@ let hold = null, locReady = false;
 const posLog = LS.get('lr_poslog', []); // как открывались книги, вместе с замерами
 const addPos = x => { posLog.push(x); while (posLog.length > 10) posLog.shift(); LS.set('lr_poslog', posLog); };
 let book = null, rendition = null, curBook = null, navToc = [], spineChars = null, lastLoc = null, progT = null;
+let openSeq = 0; // каждое открытие со своим номером: устаревшее (ушли назад, открыли заново) молча прекращается
 async function openBook(b, atCfi) {
+  const my = ++openSeq, stale = () => my !== openSeq || current !== 'Reader';
   curBook = b; show('Reader');
   $('#loading').style.display = 'flex'; $('#rTitle').textContent = b.title;
   $('#miniCh').textContent = b.title; $('#miniPct').textContent = ''; $('#bCh').textContent = ''; $('#bPct').textContent = '';
@@ -888,9 +915,10 @@ async function openBook(b, atCfi) {
     try { const r = await sb.storage.from('books').download(bookPath(b)); if (r.error) throw r.error; buf = await r.data.arrayBuffer(); await files.put(b.id, buf); } catch (e) { console.warn(e); }
     $('#loading').lastChild.textContent = 'Открываю книгу…';
   }
+  if (stale()) return;
   if (!buf) { $('#loading').style.display = 'none'; toast(!navigator.onLine || sync.offline ? 'Эта книга ещё не скачана на устройство. Откройте её, когда появится интернет.' : b.cat || CLOUD ? 'Не удалось скачать книгу. Проверьте интернет и попробуйте ещё раз.' : 'Файла этой книги нет в этом браузере. Добавьте EPUB заново.', 5000); show('Lib'); return; }
-  try { await loadEpub(); } catch (e) { if (curBook !== b) return; $('#loading').style.display = 'none'; toast(e.message, 5000); show('Lib'); return; }
-  if (curBook !== b || current !== 'Reader') return;
+  try { await loadEpub(); } catch (e) { if (stale()) return; $('#loading').style.display = 'none'; toast(e.message, 5000); show('Lib'); return; }
+  if (stale()) return;
   const bk = ePub(buf); book = bk;
   const failOpen = e => { if (book !== bk) return; logErr('open', e); $('#loading').style.display = 'none'; toast('Не удалось открыть книгу: файл повреждён или это не EPUB.', 5000); hold = null; book = null; try { bk.destroy(); } catch (e2) {} show('Lib'); };
   // битый файл: epub.js не отклоняет opened, а шлёт openFailed — иначе «Открываю книгу…» висело бы вечно

@@ -134,3 +134,18 @@ test('повреждённая книга: понятное сообщение �
   await expect(page.locator('#toast')).toContainText(/не удалось открыть книгу/i, { timeout: 20000 });
   await expect(page.locator('#sLib')).toHaveClass(/on/);
 });
+
+test('слова: состояние повторения и выгрузка словаря файлом', async ({ browser }) => {
+  const { page, errors } = await phone(browser, { width: 1000, height: 740 });
+  await page.goto('/');
+  await page.locator('#tabbar button[data-go=Words], [data-go=Words]').first().click();
+  await expect(page.locator('#sWords')).toHaveClass(/on/);
+  await expect(page.locator('.wst').first()).toHaveText('пора повторить');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#wExport').click()]);
+  expect(dl.suggestedFilename()).toMatch(/^lingua-slova-\d{4}-\d{2}-\d{2}\.txt$/);
+  const txt = require('fs').readFileSync(await dl.path(), 'utf8');
+  expect(txt).toContain('#separator:tab');
+  expect(txt).toContain('countenance\tвыражение лица');
+  expect(txt).toContain('Pride and Prejudice');
+  expect(errors).toEqual([]);
+});
