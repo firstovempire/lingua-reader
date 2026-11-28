@@ -1,0 +1,60 @@
+# Применяет supabase/schema.sql к базе Supabase, когда файл меняется в main (или вручную).
+# Файл повторно запускаемый, поэтому выполнять его снова безопасно.
+# Тот же секрет SUPABASE_ACCESS_TOKEN, что и для функции перевода.
+# Режим «report» ничего не меняет: печатает сводку журнала ошибок без данных пользователей
+# (репозиторий публичный, журнал запуска видят все).
+name: Apply database schema
+
+on:
+  push:
+    branches: [main]
+    paths: ['supabase/schema.sql']
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'apply — выполнить schema.sql; report — только сводка'
+        default: report
+        type: choice
+        options: [report, apply]
+
+jobs:
+  db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      REF: cbxhdemmwxzmksuthzue
+      TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Запрос к базе (функция)
+        run: |
+          cat > /tmp/q.sh <<'EOF'
+          # $1 — файл с SQL; печатает ответ, падает при ошибке
+          body=$(jq -Rs '{query: .}' "$1")
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' -X POST \
+            "https://api.supabase.com/v1/projects/$REF/database/query" \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$body")
+          echo "HTTP $code"
+          if [ "$code" -ge 300 ]; then cat /tmp/out.json; exit 1; fi
+          jq -c '.[]?' /tmp/out.json 2>/dev/null || cat /tmp/out.json
+          EOF
+          chmod +x /tmp/q.sh
+      - name: Выполнить schema.sql
+        if: github.event_name == 'push' || inputs.mode == 'apply'
+        run: /tmp/q.sh supabase/schema.sql
+      - name: Сводка
+        run: |
+          cat > /tmp/r.sql <<'EOF'
+          select 'tables' as what, string_agg(table_name, ',' order by table_name) as v, null::bigint as n
+            from information_schema.tables where table_schema = 'public'
+          union all select 'users', null, count(*) from auth.users
+          union all select 'items', null, count(*) from public.items
+          union all select 'errors_7d', null, count(*) from public.errors where at > now() - interval '7 days'
+          union all
+          select * from (
+            select 'err', left(coalesce(place,'') || ' | ' || coalesce(msg,''), 140), count(*)
+              from public.errors where at > now() - interval '7 days'
+              group by 2 order by 3 desc limit 25
+          ) e;
+          EOF
+          /tmp/q.sh /tmp/r.sql
