@@ -149,3 +149,34 @@ test('слова: состояние повторения и выгрузка с
   expect(txt).toContain('Pride and Prejudice');
   expect(errors).toEqual([]);
 });
+
+test('карточка: предложение только на обороте, касание по нему не переворачивает', async ({ browser }) => {
+  const { page, errors } = await phone(browser, SIZES[1]);
+  await page.addInitScript(() => { window.__said = []; speechSynthesis.speak = u => window.__said.push(u.text); });
+  await page.goto('/');
+  await page.locator('#tabbar button[data-go=Review]').click();
+  const card = page.locator('.rv-card');
+  await expect(card).toContainText('countenance');
+  await expect(card.locator('.rv-sent')).toHaveCount(0);
+  await card.click();
+  await expect(card.locator('.rv-sent')).toContainText('picture of calm');
+  await card.locator('.rv-sbtn').click();
+  await expect(card.locator('.rv-sent')).toBeVisible(); // остались на обороте
+  expect(await page.evaluate(() => window.__said)).toEqual(['Her countenance was a picture of calm.']);
+  expect(errors).toEqual([]);
+});
+
+test('слова из словаря подчёркнуты в книге, с формами и по состоянию', async ({ browser }) => {
+  const now = Date.now(), id = 'cat-jane-austen_pride-and-prejudice';
+  const { page, errors } = await phone(browser, SIZES[1], { seed: Object.assign({}, SEED, { lr_tried: true, lr_words: [
+    { id: 'a', bookId: id, w: 'acknowledge', tr: 'признавать', t: T0, box: 1, due: now + 3 * 864e5 }, // форма acknowledged
+    { id: 'b', bookId: id, w: 'fortune', tr: 'состояние', t: T0, box: 0, due: now - 1000 }, // пора повторить
+    { id: 'c', bookId: id, w: 'truth', tr: 'истина', t: T0, box: 5, due: now + 60 * 864e5 }] }) });
+  await page.goto('/');
+  await page.locator('#contBox button', { hasText: 'Читать' }).click();
+  await expect(page.locator('#loading')).toBeHidden({ timeout: 30000 });
+  await expect(page.locator('#viewer g.lr-saved').first()).toBeAttached({ timeout: 10000 });
+  await expect(page.locator('#viewer g.lr-due').first()).toBeAttached();
+  await expect(page.locator('#viewer g.lr-known').first()).toBeAttached();
+  expect(errors).toEqual([]);
+});

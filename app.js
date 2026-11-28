@@ -778,8 +778,8 @@ function renderReview() {
     const back = h('div', { class: 'rv-back' },
       ruFirst ? h('span', { class: 'rv-word', lang: 'en', text: w.w }) : h('span', { class: 'rv-tr', text: w.tr || '' }),
       w.tc ? h('span', { class: 'muted', style: 'font-size:14px', text: w.tc }) : null,
-      w.exp ? h('span', { style: 'font-size:14px;color:var(--ink2)', text: w.exp }) : null,
-      w.s ? h('button', { class: 'rv-sbtn', 'aria-label': 'Прослушать предложение', onclick: ev => { ev.stopPropagation(); speak(w.s, 0.85); } }, markSentence(w.s, w.w, false), ico('speak', 16)) : null,
+      w.exp ? h('span', { class: 'rv-exp', text: w.exp }) : null,
+      w.s ? h('button', { class: 'rv-sbtn', 'aria-label': 'Прослушать предложение', onclick: ev => { ev.stopPropagation(); if (ev.detail === 0) speak(w.s, 0.85); } }, markSentence(w.s, w.w, false), ico('speak', 16)) : null,
       w.st ? h('span', { class: 'rv-st', text: w.st }) : null);
     const ex = Array.isArray(w.ex) ? w.ex[0] : w.ex; if (ex && ex.en && !w.s) back.append(h('div', { class: 'sh-ex', style: 'text-align:left;margin-top:4px' }, h('div', { class: 'en', lang: 'en', text: ex.en }), h('div', { class: 'ru', text: ex.ru || '' })));
     card.append(back);
@@ -795,12 +795,13 @@ function renderReview() {
   let raf = 0;
   const setDx = d => { dx = d; cancelAnimationFrame(raf); raf = requestAnimationFrame(() => paintDx(d)); };
   const paintDx = d => { card.style.transform = `translateX(${d}px) rotate(${(d / 22).toFixed(1)}deg)`; const k = Math.min(1, Math.abs(d) / SWIPE); ok.style.opacity = d > 0 ? k : 0; no.style.opacity = d < 0 ? k : 0; ok.firstChild.style.transform = no.firstChild.style.transform = `scale(${(0.7 + 0.3 * k).toFixed(2)})`; };
-  card.addEventListener('pointerdown', e => { if (e.target.closest('.rv-speak')) return; x0 = e.clientX; moved = false; card.style.transition = 'none'; try { card.setPointerCapture(e.pointerId); } catch (er) {} });
+  let onSent = false; // касание по предложению на обороте — прочитать его, а не перевернуть карточку
+  card.addEventListener('pointerdown', e => { if (e.target.closest('.rv-speak')) return; onSent = !!e.target.closest('.rv-sbtn'); x0 = e.clientX; moved = false; card.style.transition = 'none'; try { card.setPointerCapture(e.pointerId); } catch (er) {} });
   card.addEventListener('pointermove', e => { if (x0 == null) return; const d = e.clientX - x0; if (Math.abs(d) > 6) moved = true; setDx(d); });
-  const up = () => { if (x0 == null) return; x0 = null; cancelAnimationFrame(raf); card.style.transition = ''; if (dx > SWIPE) commit(card, true); else if (dx < -SWIPE) commit(card, false); else { setDx(0); ok.style.opacity = no.style.opacity = 0; if (!moved) { rv.shown = !rv.shown; renderReview(); } } };
+  const up = () => { if (x0 == null) return; x0 = null; cancelAnimationFrame(raf); card.style.transition = ''; if (dx > SWIPE) commit(card, true); else if (dx < -SWIPE) commit(card, false); else { setDx(0); ok.style.opacity = no.style.opacity = 0; if (!moved) { if (onSent) speak(w.s, 0.85); else { rv.shown = !rv.shown; renderReview(); } } } };
   card.addEventListener('pointerup', up); card.addEventListener('pointercancel', up);
   card.addEventListener('touchmove', e => { if (x0 != null) e.preventDefault(); }, { passive: false }); // не отдаём свайп браузеру (жест «назад»)
-  card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); rv.shown = !rv.shown; renderReview(); } });
+  card.addEventListener('keydown', e => { if (e.target !== card) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); rv.shown = !rv.shown; renderReview(); } });
 }
 let committing = false;
 function commit(card, good) {
@@ -1424,19 +1425,48 @@ function toggleSave(c, r) {
 
 /* --- подчёркивание сохранённых слов во всём тексте --- */
 const ulAdded = new Set();
+// формы слова: acknowledge → acknowledges, acknowledged, acknowledging; study → studies, studied
+function wordForms(x) {
+  const out = new Set([x]); if (!/^[a-z]+$/.test(x) || x.length < 3) return out;
+  ['s', 'es', 'ed', 'd', 'ing', 'er', 'est', 'ly'].forEach(e => out.add(x + e));
+  if (x.endsWith('e')) { out.add(x.slice(0, -1) + 'ing'); out.add(x.slice(0, -1) + 'ed'); }
+  if (/[^aeiou]y$/.test(x)) { out.add(x.slice(0, -1) + 'ies'); out.add(x.slice(0, -1) + 'ied'); out.add(x.slice(0, -1) + 'ily'); }
+  if (/[^aeiou][aeiou][bdgmnprt]$/.test(x) && x.length <= 5) { const d = x + x.slice(-1); out.add(d + 'ed'); out.add(d + 'ing'); out.add(d + 'er'); }
+  return out;
+}
+// состояние слова в книге: пора повторить важнее, чем «учу», «учу» важнее, чем «выучено»
+const UL_RANK = { 'lr-due': 3, 'lr-saved': 2, 'lr-known': 1 };
+function ulState(w) { return isDue(w) ? 'lr-due' : (w.box || 0) >= INTERVALS.length ? 'lr-known' : 'lr-saved'; }
+function ulIndex() {
+  const single = new Map(), phrases = new Map();
+  const put = (m, k, st) => { if (!m.has(k) || UL_RANK[st] > UL_RANK[m.get(k)]) m.set(k, st); };
+  for (const w of words) {
+    const st = ulState(w);
+    for (const raw of [w.w, w.base]) {
+      const x = norm(raw).toLowerCase(); if (x.length < 2 || x.length > 60) continue;
+      if (/\s/.test(x)) put(phrases, x, st); else wordForms(x).forEach(f => put(single, f, st));
+    }
+  }
+  return { single, phrases };
+}
 function underlineSaved(contents) {
   if (!contents || !rendition) return;
   ulAdded.forEach(cfi => { try { rendition.annotations.remove(cfi, 'underline'); } catch (e) {} }); ulAdded.clear();
-  const list = [...new Set(words.map(w => w.w.toLowerCase()).filter(w => w.length > 1 && w.length < 60))];
-  if (!list.length) return;
+  if (S.ul === false || !words.length) return;
+  const { single, phrases } = ulIndex();
   const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-  const re = new RegExp('(^|[^A-Za-zÀ-ÿ])(' + list.sort((a, b) => b.length - a.length).map(esc).join('|') + ')(?![A-Za-zÀ-ÿ])', 'gi');
+  const reP = phrases.size ? new RegExp('(^|[^A-Za-zÀ-ÿ])(' + [...phrases.keys()].sort((a, b) => b.length - a.length).map(esc).join('|') + ')(?![A-Za-zÀ-ÿ])', 'gi') : null;
+  const reW = /[A-Za-zÀ-ÿ]+/g;
   const doc = contents.document, walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT); let n, count = 0;
-    while ((n = walker.nextNode()) && count < 400) {
-    re.lastIndex = 0; let m;
-    while ((m = re.exec(n.data)) && count < 400) {
-      const a = m.index + m[1].length, b = a + m[2].length; const r = doc.createRange(); r.setStart(n, a); r.setEnd(n, b);
-      try { const cfi = contents.cfiFromRange(r); rendition.annotations.underline(cfi, {}, null, 'lr-saved', { 'stroke-opacity': '1', 'mix-blend-mode': 'normal' }); ulAdded.add(cfi); count++; } catch (e) {}
+  const mark = (node, a, b, st) => { const r = doc.createRange(); r.setStart(node, a); r.setEnd(node, b); try { const cfi = contents.cfiFromRange(r); rendition.annotations.underline(cfi, {}, null, st, { 'stroke-opacity': '1', 'mix-blend-mode': 'normal' }); ulAdded.add(cfi); count++; } catch (e) {} };
+  while ((n = walker.nextNode()) && count < 400) {
+    const taken = []; let m;
+    if (reP) { reP.lastIndex = 0; while ((m = reP.exec(n.data)) && count < 400) { const a = m.index + m[1].length, b = a + m[2].length; taken.push([a, b]); mark(n, a, b, phrases.get(norm(m[2]).toLowerCase()) || 'lr-saved'); } }
+    reW.lastIndex = 0;
+    while ((m = reW.exec(n.data)) && count < 400) {
+      const st = single.get(m[0].toLowerCase()); if (!st) continue;
+      const a = m.index, b = a + m[0].length; if (taken.some(([x, y]) => a < y && b > x)) continue; // слово уже внутри подчёркнутой фразы
+      mark(n, a, b, st);
     }
   }
 }
@@ -1507,6 +1537,8 @@ function renderAa() {
     h('div', { class: 'aa-row' }, h('span', null, 'Чтение'), seg([['paged', 'Страницы'], ['scroll', 'Прокрутка']], S.flow || 'paged', v => { if ((S.flow || 'paged') === v) return; S.flow = v; saveS(); closeModal(); if (curBook) openBook(curBook, lastLoc && lastLoc.start && lastLoc.start.cfi); }, 'Режим чтения')),
     h('div', { class: 'aa-row' }, h('span', null, 'Интервал'), seg([['s', 'Плотно'], ['m', 'Обычно'], ['l', 'Свободно']], S.lh, v => { S.lh = v; upd(); }, 'Интервал')),
     h('div', { class: 'aa-row' }, h('span', null, 'Поля'), seg([['s', 'Узкие'], ['m', 'Средние'], ['l', 'Широкие']], S.margin, v => { S.margin = v; upd(); }, 'Поля')),
+    h('div', { class: 'aa-row' }, h('span', null, 'Словарь'), seg([['on', 'Подчёркивать'], ['off', 'Нет']], S.ul === false ? 'off' : 'on', v => { S.ul = v === 'on'; upd(); }, 'Слова из словаря')),
+    S.ul === false ? null : h('p', { class: 'aa-legend' }, h('i', { class: 'lg-saved' }), 'учу', h('i', { class: 'lg-due' }), 'пора повторить', h('i', { class: 'lg-known' }), 'выучено'),
     h('div', { class: 'aa-row' }, h('span', null, 'Тема'), h('div', { class: 'themes', role: 'radiogroup', 'aria-label': 'Тема' }, Object.entries(T).map(([k, [t, bg, fg]]) => h('button', { role: 'radio', 'aria-checked': String(S.theme === k), style: `background:${bg};color:${fg}`, onclick: () => { S.theme = k; upd(); } }, t))))
   );
 }
