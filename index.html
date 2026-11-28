@@ -96,6 +96,9 @@ body.tabs #tabbar{display:grid}
 .lvl[aria-checked=true] b{background:var(--accent);color:var(--accent-ink)}
 .lvl span{display:flex;flex-direction:column;gap:2px}
 .lvl small{font-size:14px;color:var(--muted)}
+/* онбординг на низком экране (панели браузера): кнопка внизу всегда видна, уровни плотнее */
+#lvlBtns{position:sticky;bottom:0;z-index:2;margin-top:auto;background:var(--bg);box-shadow:0 -16px 14px -6px var(--bg);padding:6px 0 calc(var(--safe-b) + 12px);margin-bottom:calc(-1 * (var(--safe-b) + 12px))}
+@media (max-height:700px){.lvl{padding:8px 12px}.lvl b{width:40px;height:40px;font-size:16px}#sLevel .title{font-size:24px!important}}
 .num{width:28px;height:28px;flex:none;border-radius:50%;background:var(--ink);color:var(--paper);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center}
 code{background:var(--soft);padding:1px 5px;border-radius:5px;font-size:13px}
 
@@ -135,6 +138,8 @@ body.scrollmode #viewer .epub-container{-webkit-overflow-scrolling:touch}
 #miniBar i{display:block;height:100%;width:0;background:var(--accent);opacity:.7;transition:width .3s}
 #tapHint{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:999px;font-size:14px;white-space:nowrap;z-index:12;opacity:0;pointer-events:none;transition:opacity .3s}
 #tapHint.on{opacity:.92}
+#wordHint{position:absolute;left:50%;bottom:calc(var(--safe-b) + 56px);transform:translate(-50%,8px);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:999px;font-size:15px;width:max-content;max-width:calc(100% - 32px);text-align:center;z-index:12;opacity:0;pointer-events:none;transition:opacity .3s,transform .3s;box-shadow:0 6px 16px rgba(0,0,0,.18)}
+#wordHint.on{opacity:.94;transform:translate(-50%,0)}
 #mini{position:absolute;left:var(--gut);right:var(--gut);bottom:calc(var(--safe-b) + 12px);display:flex;justify-content:center;align-items:center;gap:8px;font-size:12px;color:var(--muted);pointer-events:none;white-space:nowrap;font-variant-numeric:tabular-nums}
 #loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;gap:8px;color:var(--muted);background:var(--paper);z-index:4}
 #rtop,#rbottom{position:absolute;left:0;right:0;z-index:10;background:var(--paper);transition:transform .22s ease,opacity .22s ease}
@@ -566,7 +571,7 @@ body[data-theme=night] .cat-ad{color:#FBF2D6}
       <p style="margin:0;font-size:16px;color:var(--ink2)">Под него подстроим объяснения и примеры. Поменять можно в профиле.</p>
     </div>
     <div role="radiogroup" aria-label="Уровень" id="lvlList" style="display:flex;flex-direction:column;gap:10px"></div>
-    <button class="btn primary big" id="lvlNext" style="margin-top:auto">Дальше</button>
+    <div id="lvlBtns"><button class="btn primary big" id="lvlNext" style="width:100%">Дальше</button></div>
   </div></div>
 </section>
 
@@ -648,6 +653,7 @@ body[data-theme=night] .cat-ad{color:#FBF2D6}
   <button id="nextCh" class="btn dark">Следующая глава<svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="m9 6 6 6-6 6"/></svg></button>
   <div id="mini"><span id="miniBar" aria-hidden="true"><i></i></span><span id="miniPct"></span></div>
   <div id="tapHint" aria-hidden="true">Меню — коснитесь поля сверху или снизу</div>
+  <div id="wordHint" role="status">Коснитесь слова — появится перевод</div>
   <div id="loading"><span class="spin"></span>Открываю книгу…</div>
   <header id="rtop"><div class="row">
     <button class="icobtn" id="rBack" aria-label="К библиотеке"><svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>

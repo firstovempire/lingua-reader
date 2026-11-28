@@ -6,7 +6,7 @@
 (() => {
 'use strict';
 
-const VER = 39; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 40; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -125,16 +125,17 @@ async function flush() {
         const r = await sb.from('items').upsert(rows, { onConflict: 'user_id,kind,id' }).select('kind,id,updated_at');
         if (r.error) { if (isNetErr(r.error)) throw r.error; bad = true; err = part[0][1].kind + ': ' + r.error.message; logErr('sync ' + part[0][1].kind, r.error); break; }
         for (const x of r.data || []) srvAt[x.kind + '|' + x.id] = x.updated_at;
-        for (const [k, it] of part) if (queue[k] === it) delete queue[k];
+        // запись ушла; если её успели изменить ещё раз во время отправки — новая правка опирается на нашу же версию, это не конфликт
+        for (const [k, it] of part) { if (queue[k] === it) delete queue[k]; else if (queue[k] && srvAt[k]) queue[k].base = srvAt[k]; }
       }
     }
-    LS.set('lr_queue', queue); LS.set('lr_seen', srvAt);
     if (!bad) { sync.okAt = Date.now(); LS.set('lr_syncok', sync.okAt); }
     sync.err = err;
   } catch (e) { bad = true; if (isNetErr(e)) setOffline(true); else { sync.err = String(e.message || e); logErr('sync', e); } }
-  finally { syncing = false; }
+  finally { syncing = false; LS.set('lr_queue', queue); LS.set('lr_seen', srvAt); } // и при обрыве связи: уже отправленное помнится после перезапуска
   updSync();
   if (bad && !sync.offline) { clearTimeout(syncT); syncT = setTimeout(flush, 30000); }
+  else if (!bad && Object.keys(queue).length) { clearTimeout(syncT); syncT = setTimeout(flush, 300); } // правки, сделанные во время отправки
 }
 // Забрать данные с сервера. Обычно — только изменённое с прошлого раза; целиком — раз в сутки и при входе
 async function pull(full) {
@@ -427,6 +428,12 @@ function partialParse(txt) {
 }
 function apiError(status, data) {
   const m = (data && data.error && (data.error.message || JSON.stringify(data.error))) || ('HTTP ' + status);
+  // через сервер: ключ и регион проверяет сервер, сюда доходят только сбои самого сервера и входа
+  if (CLOUD) {
+    if (status === 401) return 'Вход устарел. Обновите страницу; если не поможет — выйдите и войдите снова.';
+    if (status === 429) return 'Слишком много переводов подряд. Подождите минуту и коснитесь слова ещё раз.';
+    if (status >= 500) return 'Сервер перевода временно недоступен. Коснитесь слова ещё раз через минуту.';
+  }
   if (/location is not supported/i.test(m)) return 'Google не принимает запросы из этого региона. Включите VPN (например, Франция) и повторите.';
   if (status === 400 && /API key/i.test(m)) return 'Ключ не принят. Скопируйте его заново целиком.';
   if (status === 401 || status === 403) return 'Ключ не принят (' + status + '). Проверьте, что он скопирован целиком.\n' + m;
@@ -623,7 +630,7 @@ async function addFromCatalog(x, btn) {
     await files.put(nb.id, buf);
     books.unshift(nb); saveBooks(); renderLib(); buzz(10);
     toast('Добавлено: ' + x.title); renderCatalog();
-  } catch (e) { btn.disabled = false; btn.textContent = 'Повторить'; toast('Не удалось скачать: ' + e.message, 4000); }
+  } catch (e) { btn.disabled = false; btn.textContent = 'Повторить'; toast(navigator.onLine ? 'Не удалось скачать книгу. Попробуйте ещё раз.' : 'Нет интернета. Добавьте книгу, когда связь вернётся.', 4000); }
 }
 $('#catBtn').onclick = openCatalog;
 
@@ -865,8 +872,13 @@ async function openBook(b, atCfi) {
     try { const r = await sb.storage.from('books').download(bookPath(b)); if (r.error) throw r.error; buf = await r.data.arrayBuffer(); await files.put(b.id, buf); } catch (e) { console.warn(e); }
     $('#loading').lastChild.textContent = 'Открываю книгу…';
   }
-  if (!buf) { $('#loading').style.display = 'none'; toast('Файл книги не найден в этом браузере', 4000); show('Lib'); return; }
+  if (!buf) { $('#loading').style.display = 'none'; toast(!navigator.onLine || sync.offline ? 'Эта книга ещё не скачана на устройство. Откройте её, когда появится интернет.' : b.cat || CLOUD ? 'Не удалось скачать книгу. Проверьте интернет и попробуйте ещё раз.' : 'Файла этой книги нет в этом браузере. Добавьте EPUB заново.', 5000); show('Lib'); return; }
   const bk = ePub(buf); book = bk;
+  const failOpen = e => { if (book !== bk) return; logErr('open', e); $('#loading').style.display = 'none'; toast('Не удалось открыть книгу: файл повреждён или это не EPUB.', 5000); hold = null; book = null; try { bk.destroy(); } catch (e2) {} show('Lib'); };
+  // битый файл: epub.js не отклоняет opened, а шлёт openFailed — иначе «Открываю книгу…» висело бы вечно
+  try { await new Promise((ok, no) => { bk.on('openFailed', no); bk.opened.then(ok, no); setTimeout(() => no(new Error('open timeout')), 30000); }); }
+  catch (e) { failOpen(e); return; }
+  if (book !== bk) return;
   // iOS Safari не передаёт касания в iframe без allow-scripts, поэтому скрипты разрешаем,
   // а сами скрипты и обработчики из книги вырезаем до показа (защита от «вредных» EPUB)
   bk.spine.hooks.content.register(doc => {
@@ -887,7 +899,8 @@ async function openBook(b, atCfi) {
   applyReader();
   let start = atCfi || b.cfi || undefined;
   if (!start && b.cat) { try { await bk.loaded.spine; const it = bk.spine.spineItems.find(x => !/(titlepage|imprint|halftitle)/i.test(x.href || '')); if (it) start = it.href; } catch (e) {} } // книги каталога: сразу к тексту, без служебных страниц
-  try { await rendition.display(start); } catch (e) { if (holding) holding.err = String(e && e.message || e).slice(0, 80); try { await rendition.display(); } catch (e2) {} }
+  try { await rendition.display(start); } catch (e) { if (holding) holding.err = String(e && e.message || e).slice(0, 80); try { await rendition.display(); } catch (e2) {
+    if (book !== bk) return; try { rendition.destroy(); } catch (e3) {} rendition = null; failOpen(e2); return; } }
   // шрифт и размер меняют раскладку уже после показа, и страница съезжает назад: ждём их и встаём на место ещё раз
   if (start && /^epubcfi/.test(start)) {
     try {
@@ -899,9 +912,12 @@ async function openBook(b, atCfi) {
   $('#loading').style.display = 'none';
   if (book !== bk) return;
   b.lastRead = Date.now(); saveBooks();
+  // первое чтение: подсказка «коснитесь слова» висит до первого перевода; меню показываем со следующего раза
+  const firstTry = !LS.get('lr_tried', false) && !words.length;
+  if (firstTry) { $('#wordHint').textContent = isDesk() ? 'Нажмите на слово — появится перевод' : 'Коснитесь слова — появится перевод'; setTimeout(() => { if (book === bk && !LS.get('lr_tried', false)) $('#wordHint').classList.add('on'); }, 900); }
   // подсказка: как открыть меню (первые три раза), панели видны пару секунд
   if (!isDesk()) { const n = LS.get('lr_taphint', 0); toggleChrome(true); setTimeout(() => { if (current === 'Reader') toggleChrome(false); }, 2200);
-    if (n < 3) { LS.set('lr_taphint', n + 1); tapHintT = setTimeout(() => { $('#tapHint').classList.add('on'); tapHintT = setTimeout(() => $('#tapHint').classList.remove('on'), 2600); }, 2400); } }
+    if (n < 3 && !firstTry) { LS.set('lr_taphint', n + 1); tapHintT = setTimeout(() => { $('#tapHint').classList.add('on'); tapHintT = setTimeout(() => $('#tapHint').classList.remove('on'), 2600); }, 2400); } }
   rendition.on('relocated', onRelocated);
   if (rendition.location && rendition.location.start) onRelocated(rendition.location);
   if (holding) setTimeout(() => { if (hold === holding && !holding.err) { hold = null; if (book === bk && rendition && rendition.location) onRelocated(rendition.location); } }, 6000); // страницы считаются долго — не ждём
@@ -1193,6 +1209,7 @@ ${isPhrase(c.sel) ? `{
 }
 const cacheKey = c => (S.level || 'B1') + '|' + c.sel.toLowerCase() + '||' + c.sentence.slice(0, 220);
 async function translate(c) {
+  if (!LS.get('lr_tried', false)) { LS.set('lr_tried', true); $('#wordHint').classList.remove('on'); }
   if (aborter) aborter.abort(); aborter = new AbortController(); const signal = aborter.signal;
   if (useBubble()) openBubble(c);
   else {

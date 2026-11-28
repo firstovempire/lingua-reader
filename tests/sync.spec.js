@@ -154,3 +154,24 @@ for (const serverLater of [true, false]) {
     await expect.poll(() => db.get('word', 'w1').box).toBe(want);
   });
 }
+
+test('правка во время медленной отправки не теряется', async ({ browser }) => {
+  const db = new FakeDB();
+  db.put('set', 'S', LEVEL);
+  const a = await device(browser, db, { lr_s: LEVEL });
+  await openLib(a.page);
+  await a.page.locator('#tabbar button[data-go=Profile]').click();
+  db.slowPost = 2500;
+  await a.page.getByRole('button', { name: /Цель на день/ }).first().click();
+  await a.page.getByRole('radio', { name: '20 мин' }).click();
+  await expect.poll(() => db.log.filter(l => l.startsWith('POST /rest/v1/items')).length).toBeGreaterThan(0); // первая отправка в пути
+  await a.page.getByRole('button', { name: /Цель на день/ }).first().click();
+  await a.page.getByRole('radio', { name: '30 мин' }).click();
+  db.slowPost = 0;
+  await expect.poll(() => (db.get('set', 'S') || {}).goal, { timeout: 15000 }).toBe(30);
+  // возвращение на вкладку: сверка с сервером не откатывает правку
+  await a.page.evaluate(() => { dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
+  await a.page.waitForTimeout(1500);
+  expect((await ls(a.page, 'lr_s')).goal).toBe(30);
+  expect(await a.page.evaluate(() => Object.keys(window.__lr.queue).length)).toBe(0);
+});
