@@ -8,7 +8,7 @@
 "size": 11691252,
 "about": "«Кролик Питер» и ещё 21 сказка Беатрис Поттер. Очень короткие истории, простые фразы и акварельная картинка почти на каждой странице.",
 "common": 85,
-"rare": 1592
+"rare": 1621
 },
 {
 "id": "book-dash_picture-books",
@@ -20,7 +20,7 @@
 "about": "10 коротких историй с картинками от Book Dash. По паре простых фраз на страницу: хорошая первая книга.",
 "note": "Для начинающих · картинки · CC BY 4.0",
 "common": 89,
-"rare": 133
+"rare": 136
 },
 {
 "id": "rudyard-kipling_just-so-stories",
@@ -31,7 +31,7 @@
 "size": 2255139,
 "about": "«Сказки просто так»: откуда у слона хобот, а у леопарда пятна. Короткие сказки, которые читаются за вечер.",
 "common": 90,
-"rare": 1139
+"rare": 1162
 },
 {
 "id": "jacob-grimm_wilhelm-grimm_household-tales_margaret-hunt",
@@ -42,7 +42,7 @@
 "size": 823216,
 "about": "Сказки братьев Гримм: Золушка, Белоснежка, Гензель и Гретель — больше двухсот историй, сюжеты которых вы уже знаете.",
 "common": 91,
-"rare": 3958
+"rare": 4034
 },
 {
 "id": "oscar-wilde_childrens-stories",
@@ -53,7 +53,7 @@
 "size": 246874,
 "about": "Сказки Уайльда: «Счастливый принц», «Соловей и роза», «Великан-эгоист». Короткие, добрые и очень красивые.",
 "common": 88,
-"rare": 2176
+"rare": 2209
 },
 {
 "id": "mary-godolphin_robinson-crusoe",
@@ -66,7 +66,7 @@
 "adapted": true,
 "by": "только односложные слова",
 "common": 95,
-"rare": 482
+"rare": 489
 },
 {
 "id": "l-frank-baum_the-wonderful-wizard-of-oz",
@@ -77,7 +77,7 @@
 "size": 197983,
 "about": "Оригинал «Волшебника Изумрудного города»: Дороти, Страшила, Железный Дровосек и Лев.",
 "common": 93,
-"rare": 911
+"rare": 932
 },
 {
 "id": "lewis-carroll_alices-adventures-in-wonderland_john-tenniel",
@@ -88,7 +88,7 @@
 "size": 4710777,
 "about": "«Алиса в Стране чудес» с иллюстрациями Тенниела. Игра слов, которую интересно разгадывать на английском.",
 "common": 93,
-"rare": 845
+"rare": 862
 },
 {
 "id": "frances-hodgson-burnett_the-secret-garden",
@@ -98,8 +98,8 @@
 "words": 81359,
 "size": 317089,
 "about": "Девочка находит заброшенный сад, и он меняет всех вокруг. Простой язык, тёплая история.",
-"common": 92,
-"rare": 2163
+"common": 91,
+"rare": 2200
 },
 {
 "id": "jack-london_the-call-of-the-wild",
@@ -110,7 +110,7 @@
 "size": 170772,
 "about": "Пёс Бак попадает на Аляску во времена золотой лихорадки. Короткий и динамичный роман.",
 "common": 85,
-"rare": 2311
+"rare": 2347
 },
 {
 "id": "jack-london_white-fang",
@@ -121,7 +121,7 @@
 "size": 254902,
 "about": "«Белый Клык» — путь волчонка от дикой природы к человеку.",
 "common": 86,
-"rare": 3529
+"rare": 3574
 },
 {
 "id": "j-m-barrie_peter-and-wendy",
@@ -132,7 +132,7 @@
 "size": 237063,
 "about": "Оригинальный «Питер Пэн»: Неверленд, пираты и капитан Крюк.",
 "common": 90,
-"rare": 2196
+"rare": 2232
 },
 {
 "id": "rudyard-kipling_the-jungle-book",
@@ -143,7 +143,7 @@
 "size": 221561,
 "about": "«Книга джунглей»: Маугли, Багира, Балу и другие рассказы Киплинга.",
 "common": 88,
-"rare": 1897
+"rare": 1935
 },
 {
 "id": "anna-sewell_black-beauty",
@@ -154,7 +154,7 @@
 "size": 240499,
 "about": "История лошади, рассказанная ею самой. Спокойный язык, удобно для начала.",
 "common": 93,
-"rare": 1547
+"rare": 1566
 },
 {
 "id": "e-nesbit_the-railway-children",
@@ -165,7 +165,7 @@
 "size": 278611,
 "about": "Трое детей переезжают в деревню у железной дороги. Лёгкая семейная классика.",
 "common": 92,
-"rare": 2094
+"rare": 2135
 },
 {
 "id": "voa_american-stories",
@@ -178,7 +178,7 @@
 "adapted": true,
 "by": "learningenglish.voanews.com",
 "common": 95,
-"rare": 296
+"rare": 304
 },
 {
 "id": "arthur-conan-doyle_the-adventures-of-sherlock-holmes",
@@ -189,7 +189,7 @@
 "size": 322902,
 "about": "Двенадцать рассказов о Шерлоке Холмсе. Каждый можно прочитать за вечер.",
 "common": 90,
-"rare": 4163
+"rare": 4209
 },
 {
 "id": "arthur-conan-doyle_the-hound-of-the-baskervilles",
@@ -200,7 +200,7 @@
 "size": 242136,
 "about": "Самое известное дело Холмса: болота, проклятие и огромная собака.",
 "common": 90,
-"rare": 2753
+"rare": 2779
 },
 {
 "id": "robert-louis-stevenson_treasure-island",
@@ -211,7 +211,7 @@
 "size": 314680,
 "about": "«Остров сокровищ»: карта, пираты и Джон Сильвер.",
 "common": 89,
-"rare": 2950
+"rare": 3005
 },
 {
 "id": "robert-louis-stevenson_the-strange-case-of-dr-jekyll-and-mr-hyde",
@@ -222,7 +222,7 @@
 "size": 164073,
 "about": "Короткая повесть о докторе Джекиле и мистере Хайде. Мрачно и быстро читается.",
 "common": 88,
-"rare": 1867
+"rare": 1883
 },
 {
 "id": "h-g-wells_the-time-machine",
@@ -233,7 +233,7 @@
 "size": 201267,
 "about": "Путешественник во времени попадает в далёкое будущее. Короткий научно-фантастический роман.",
 "common": 86,
-"rare": 2296
+"rare": 2307
 },
 {
 "id": "h-g-wells_the-war-of-the-worlds",
@@ -243,8 +243,8 @@
 "words": 60594,
 "size": 305786,
 "about": "Марсиане высаживаются в Англии. Классика фантастики о вторжении.",
-"common": 86,
-"rare": 3611
+"common": 85,
+"rare": 3657
 },
 {
 "id": "mark-twain_the-adventures-of-tom-sawyer",
@@ -255,7 +255,7 @@
 "size": 307272,
 "about": "Приключения Тома Сойера на Миссисипи. Много живой разговорной речи.",
 "common": 87,
-"rare": 3945
+"rare": 3994
 },
 {
 "id": "charles-dickens_a-christmas-carol",
@@ -266,7 +266,7 @@
 "size": 169683,
 "about": "«Рождественская песнь»: скряга Скрудж и три духа. Короткая повесть.",
 "common": 89,
-"rare": 2004
+"rare": 2027
 },
 {
 "id": "jerome-k-jerome_three-men-in-a-boat",
@@ -277,7 +277,7 @@
 "size": 284905,
 "about": "«Трое в лодке, не считая собаки» — британский юмор в оригинале.",
 "common": 90,
-"rare": 3284
+"rare": 3335
 },
 {
 "id": "kenneth-grahame_the-wind-in-the-willows",
@@ -288,7 +288,7 @@
 "size": 290072,
 "about": "«Ветер в ивах»: Крот, Крыс, Барсук и мистер Жаб.",
 "common": 88,
-"rare": 3405
+"rare": 3454
 },
 {
 "id": "oscar-wilde_the-importance-of-being-earnest",
@@ -299,7 +299,7 @@
 "size": 140720,
 "about": "Пьеса «Как важно быть серьёзным». Сплошные диалоги и остроумие.",
 "common": 89,
-"rare": 1028
+"rare": 1042
 },
 {
 "id": "bram-stoker_dracula",
@@ -310,7 +310,7 @@
 "size": 440754,
 "about": "«Дракула» в письмах и дневниках. Длинный, но затягивает.",
 "common": 91,
-"rare": 5256
+"rare": 5314
 },
 {
 "id": "kate-chopin_the-awakening",
@@ -321,7 +321,7 @@
 "size": 218171,
 "about": "«Пробуждение»: женщина в Новом Орлеане конца XIX века ищет себя.",
 "common": 88,
-"rare": 2910
+"rare": 2951
 },
 {
 "id": "charles-lamb_mary-lamb_tales-from-shakespeare",
@@ -334,7 +334,7 @@
 "adapted": true,
 "by": "пересказ пьес",
 "common": 88,
-"rare": 3572
+"rare": 3614
 },
 {
 "id": "f-scott-fitzgerald_the-great-gatsby",
@@ -345,7 +345,7 @@
 "size": 198832,
 "about": "«Великий Гэтсби»: богатство, вечеринки и разбитые мечты эпохи джаза.",
 "common": 88,
-"rare": 2924
+"rare": 2963
 },
 {
 "id": "oscar-wilde_the-picture-of-dorian-gray",
@@ -356,7 +356,7 @@
 "size": 300577,
 "about": "«Портрет Дориана Грея»: портрет стареет вместо героя. Афоризмы на каждой странице.",
 "common": 89,
-"rare": 3433
+"rare": 3480
 },
 {
 "id": "jane-austen_pride-and-prejudice",
@@ -367,7 +367,7 @@
 "size": 469323,
 "about": "«Гордость и предубеждение»: Элизабет Беннет и мистер Дарси. Изящный язык начала XIX века.",
 "common": 90,
-"rare": 3247
+"rare": 3278
 },
 {
 "id": "charlotte-bronte_jane-eyre",
@@ -377,8 +377,8 @@
 "words": 188139,
 "size": 560696,
 "about": "«Джейн Эйр»: сирота, гувернантка и тайна Торнфилда.",
-"common": 87,
-"rare": 7682
+"common": 86,
+"rare": 7763
 },
 {
 "id": "mary-shelley_frankenstein",
@@ -388,8 +388,8 @@
 "words": 78127,
 "size": 327693,
 "about": "«Франкенштейн»: учёный создаёт жизнь и не справляется с последствиями.",
-"common": 85,
-"rare": 3907
+"common": 84,
+"rare": 3940
 },
 {
 "id": "edgar-allan-poe_short-fiction",
@@ -400,7 +400,7 @@
 "size": 950223,
 "about": "Рассказы Эдгара По: «Падение дома Ашеров», «Золотой жук», «Убийство на улице Морг».",
 "common": 82,
-"rare": 11973
+"rare": 12077
 },
 {
 "id": "virginia-woolf_mrs-dalloway",
@@ -411,6 +411,6 @@
 "size": 240552,
 "about": "«Миссис Дэллоуэй»: один день в Лондоне глазами нескольких героев. Поток сознания.",
 "common": 89,
-"rare": 3581
+"rare": 3616
 }
 ]

@@ -380,7 +380,7 @@ function show(name) {
   document.body.classList.toggle('tabs', TABBED.has(name));
   document.body.classList.toggle('reading', name === 'Reader');
   $$('#tabbar button').forEach(b => { if (b.dataset.go === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-  if (name !== 'Reader') { closeSheet(); closeModal(); document.body.classList.remove('chrome'); $('#askBar').classList.remove('on'); }
+  if (name !== 'Reader') { closeSheet(); closeModal(); document.body.classList.remove('chrome'); $('#askBar').classList.remove('on'); clearTimeout(askT); }
   if (name !== 'Login') lgRun++; else if (!was) lgDemo(); // уходим со входа — пример останавливается; повторный показ не начинает сначала
   if (name === 'Lib') renderLib();
   if (name === 'Words') renderWords();
@@ -617,7 +617,7 @@ async function openStats(b) {
       ws.length ? [row('В словаре', fmt(ws.length)), row('Выучено', fmt(known)), row('Учу', fmt(ws.length - known)), due ? row('Пора повторить', fmt(due)) : null,
         h('button', { class: 'btn primary', style: 'margin-top:6px', onclick: () => { rv = { mode: 'book', queue: shuffle(ws.map(w => w.id)).slice(0, 60), pos: 0, shown: false, got: [], miss: [] }; closeModal(); show('Review'); } }, 'Повторить слова из книги')]
         : h('p', { class: 'muted', style: 'margin:0;font-size:14px', text: 'Пока нет. Коснитесь слова в книге и сохраните его — оно появится здесь.' }))];
-  const lex = h('section', { class: 'st-card' }); kids.push(lex);
+  const lex = h('section', { class: 'st-card', hidden: true }); kids.push(lex); // показываем, когда данные каталога пришли
   openModal(kids.filter(Boolean));
   let c = null; if (b.cat) { try { c = (await loadCatalog()).find(x => x.id === b.cat); } catch (e) {} }
   if (c && c.common) lex.append(h('h4', null, 'Лексика'),
@@ -626,6 +626,7 @@ async function openStats(b) {
     row('Редких слов', '≈ ' + fmt(Math.round(c.rare / 50) * 50)),
     h('p', { class: 'muted', style: 'margin:4px 0 0;font-size:13px', text: 'Частые — 2000 слов, которые встречаются почти во всех книгах каталога. Чем больше их доля, тем легче читать; редкие слова — те, что придётся переводить.' }));
   else lex.remove();
+  lex.hidden = false;
 }
 async function delBook(b) {
   if (!confirm('Удалить «' + b.title + '»? Слова и заметки из неё тоже удалятся.')) return;
@@ -870,7 +871,7 @@ function renderResult(box) {
   box.append(h('h2', { style: 'margin:4px 0 0;font-family:var(--serif);font-size:22px;font-weight:600', text: 'Итог круга' }),
     h('section', { class: 'card', style: 'padding:14px;display:flex;flex-direction:column;gap:8px' }, h('h3', { style: 'margin:0;font-size:14px;color:var(--accent);display:flex;gap:6px;align-items:center' }, ico('check', 18), 'Угадал · ' + rv.got.length), rv.got.length ? list(rv.got) : h('span', { class: 'muted', text: '—' })),
     h('section', { class: 'card', style: 'padding:14px;display:flex;flex-direction:column;gap:8px' }, h('h3', { style: 'margin:0;font-size:14px;color:var(--warn);display:flex;gap:8px;align-items:center' }, h('i', { class: 'dot' }), 'Не угадал · ' + rv.miss.length), rv.miss.length ? list(rv.miss) : h('span', { class: 'muted', text: 'Все слова угаданы' })));
-  if (rv.miss.length) box.append(h('button', { class: 'btn primary big', onclick: () => { rv = { mode: 'missed', quick: rv.mode === 'quick' || rv.quick, queue: shuffle(rv.miss.slice()), pos: 0, shown: false, got: [], miss: [] }; renderReview(); } }, 'Прогнать не угаданные · ' + rv.miss.length));
+  if (rv.miss.length) box.append(h('button', { class: 'btn primary big', onclick: () => { rv = { mode: 'missed', quick: rv.mode === 'quick' || rv.mode === 'book' || rv.quick, queue: shuffle(rv.miss.slice()), pos: 0, shown: false, got: [], miss: [] }; renderReview(); } }, 'Прогнать не угаданные · ' + rv.miss.length));
   const more = words.filter(isDue).length;
   if (rv.mode === 'quick' && more && !rv.miss.length) box.append(h('button', { class: 'btn primary big', onclick: () => { startRound('quick'); renderReview(); } }, 'Ещё ' + Math.min(QUICK, more) + ' ' + plural(Math.min(QUICK, more), 'карточка', 'карточки', 'карточек')));
   const short = rv.mode === 'quick' || rv.quick || rv.mode === 'book';

@@ -6,8 +6,13 @@ const JSZip = require('../lib/jszip.min.js');
 const DIR = __dirname, TOP = 2000;
 const list = JSON.parse(fs.readFileSync(path.join(DIR, 'catalog.json'), 'utf8'));
 // грубая основа слова: walked, walking, walks → walk; stories → story
-const stem = k => k.length < 5 ? k : k.replace(/'s$/, '').replace(/ies$/, 'y').replace(/(ing|ed|es|s)$/, '');
-const SKIP = /(toc|titlepage|imprint|colophon|uncopyright|halftitle|loi|endnotes|copyright|dedication)\.x?html$/i;
+const stem = w => {
+  const k = w.replace(/'s$/, ''); if (k.length < 5) return k;
+  if (/[^aeiou]ies$/.test(k)) return k.slice(0, -3) + 'y';
+  const m = /^(.+?)(ing|ed|es|s)$/.exec(k); // основа не короче 4 букв: thing, speed, need остаются как есть
+  return m && m[1].length >= 4 && !/ss$/.test(k) && !/eed$/.test(k) ? m[1] : k;
+};
+const SKIP = /(toc|nav|titlepage|imprint|colophon|uncopyright|halftitle|loi|endnotes|copyright|dedication)\.x?html$/i;
 
 async function bookTokens(file) {
   const zip = await JSZip.loadAsync(fs.readFileSync(file));
