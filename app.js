@@ -6,7 +6,7 @@
 (() => {
 'use strict';
 
-const VER = 43; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 44; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -35,7 +35,8 @@ const P = {
   mark: '<path d="M6 3h12v18l-6-4-6 4z"/>', check: '<path d="m5 12 5 5 9-10"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>', ext: '<path d="M7 17 17 7M9 7h8v8"/>',
   flame: '<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5.3 1.6 1 2.6 2 3 0-3 .5-5.5 1-8.5z"/>',
-  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  chart: '<path d="M5 20V11M12 20V5M19 20v-6"/>'
 };
 const ico = (n, size = 22, extra = '') => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'i'); s.setAttribute('aria-hidden', 'true'); s.style.cssText = `width:${size}px;height:${size}px;${extra}`; s.innerHTML = P[n]; return s; };
 const LS = {
@@ -63,7 +64,7 @@ const loadEpub = () => /** @type {any} */ (window).ePub ? Promise.resolve() : ep
   const add = src => new Promise((ok, no) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => { el.remove(); no(new Error('Не удалось загрузить читалку. Проверьте интернет.')); }; document.head.append(el); });
   try { await add('lib/jszip.min.js'); await add('lib/epub.min.js'); } catch (e) { epubP = null; throw e; }
 })());
-function speak(text) { try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'en-US'; u.rate = 0.9; const v = speechSynthesis.getVoices().find(v => /^en(-|_)US/i.test(v.lang)); if (v) u.voice = v; speechSynthesis.speak(u); } catch (e) {} }
+function speak(text, rate = 0.9) { try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'en-US'; u.rate = rate; const v = speechSynthesis.getVoices().find(v => /^en(-|_)US/i.test(v.lang)); if (v) u.voice = v; speechSynthesis.speak(u); } catch (e) {} }
 
 /* ================= облако ================= */
 const CFG = window.LR_CONFIG || {};
@@ -379,7 +380,7 @@ function show(name) {
   document.body.classList.toggle('tabs', TABBED.has(name));
   document.body.classList.toggle('reading', name === 'Reader');
   $$('#tabbar button').forEach(b => { if (b.dataset.go === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-  if (name !== 'Reader') { closeSheet(); closeModal(); document.body.classList.remove('chrome'); }
+  if (name !== 'Reader') { closeSheet(); closeModal(); document.body.classList.remove('chrome'); $('#askBar').classList.remove('on'); clearTimeout(askT); }
   if (name !== 'Login') lgRun++; else if (!was) lgDemo(); // уходим со входа — пример останавливается; повторный показ не начинает сначала
   if (name === 'Lib') renderLib();
   if (name === 'Words') renderWords();
@@ -388,7 +389,11 @@ function show(name) {
   updBadge(); if (CLOUD) updNet();
 }
 $$('#tabbar button').forEach(b => b.onclick = () => show(b.dataset.go));
-function updBadge() { const b = $('#revBadge'); const n = words.filter(w => (w.due || 0) <= Date.now()).length; b.hidden = !n; b.textContent = n; }
+function updBadge() {
+  const b = $('#revBadge'); const n = words.filter(w => (w.due || 0) <= Date.now()).length; b.hidden = !n; b.textContent = n;
+  // цифра на значке приложения на главном экране (Android, компьютер; iPhone — если разрешены уведомления)
+  try { const nav = /** @type {any} */ (navigator); if (nav.setAppBadge) (n ? nav.setAppBadge(n) : nav.clearAppBadge()).catch(() => {}); } catch (e) {}
+}
 
 function applyTheme() {
   document.body.dataset.theme = S.theme;
@@ -570,6 +575,16 @@ function renderLib() {
         h('div', { class: 'muted', style: 'font-size:13px', text: Math.round((cont.pct || 0) * 100) + '%' + minsLeftText(cont) }),
         h('button', { class: 'btn primary', style: 'margin-top:auto;align-self:flex-start', onclick: () => openBook(cont) }, 'Читать'))));
   }
+  const due = words.filter(isDue).length;
+  if (due) {
+    const n = Math.min(QUICK, due);
+    box.append(h('section', { class: 'card quick', 'aria-label': 'Повторение' },
+      h('span', { class: 'q-ic' }, ico('clock', 22)),
+      h('div', { style: 'flex:1;min-width:0;display:flex;flex-direction:column;gap:2px' },
+        h('b', { style: 'font-size:16px', text: 'Пора повторить' }),
+        h('span', { class: 'muted', style: 'font-size:13px', text: due + ' ' + plural(due, 'слово', 'слова', 'слов') + ' · ' + (due > n ? 'начнём с ' + n + ', ' : '') + 'около минуты' })),
+      h('button', { class: 'btn dark', onclick: () => { startRound('quick'); show('Review'); } }, 'Начать')));
+  }
   if (!books.length) { list.append(h('li', { class: 'empty', style: 'display:block;border:0' }, h('div', { style: 'font-family:var(--serif);font-size:18px;color:var(--ink);margin-bottom:6px', text: 'Пока нет книг' }), 'Нажмите «+ EPUB» и выберите файл книги на английском — или возьмите бесплатную классику из каталога.', h('div', { style: 'margin-top:14px' }, h('button', { class: 'btn primary', onclick: openCatalog }, 'Открыть каталог')))); return; }
   sorted.forEach(b => {
     const pct = Math.round((b.pct || 0) * 100);
@@ -579,8 +594,39 @@ function renderLib() {
     list.append(h('li', null,
       h('button', { class: 'open', onclick: () => openBook(b) }, coverEl(b, 52, 76, 8),
         h('div', { style: 'flex:1;min-width:0;display:flex;flex-direction:column;gap:4px' }, h('div', { class: 't', text: b.title }), h('div', { class: 'muted', style: 'font-size:14px', text: b.author || '' }), status)),
+      h('button', { class: 'icobtn', 'aria-label': 'Статистика «' + b.title + '»', style: 'color:var(--muted)', onclick: () => openStats(b) }, ico('chart', 20)),
       h('button', { class: 'icobtn', 'aria-label': 'Удалить «' + b.title + '»', style: 'color:var(--muted)', onclick: () => delBook(b) }, ico('trash', 20))));
   });
+}
+// статистика книги: прогресс, слова из неё в словаре, лексика (для книг каталога — посчитана заранее, catalog/stats.js)
+async function openStats(b) {
+  const ws = words.filter(w => w.bookId === b.id);
+  const known = ws.filter(w => (w.box || 0) >= INTERVALS.length).length, due = ws.filter(isDue).length;
+  const pct = Math.round((b.pct || 0) * 100);
+  const row = (k, v) => h('div', { class: 'st-row' }, h('span', { class: 'muted', text: k }), h('b', { text: v }));
+  const fmt = n => n.toLocaleString('ru-RU');
+  const kids = [
+    h('h3', { style: 'margin:0;font-family:var(--serif);font-size:21px', lang: 'en', text: b.title }),
+    b.author ? h('p', { class: 'muted', style: 'margin:-10px 0 0', lang: 'en', text: b.author }) : null,
+    h('section', { class: 'st-card' }, h('h4', null, 'Чтение'),
+      h('div', { class: 'bar', style: 'height:6px' }, h('i', { style: `width:${pct}%` })),
+      row('Прочитано', pct + '%'),
+      b.added ? row('Добавлена', new Date(b.added).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })) : null,
+      b.lastRead ? row('Последний раз', new Date(b.lastRead).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })) : null),
+    h('section', { class: 'st-card' }, h('h4', null, 'Слова из этой книги'),
+      ws.length ? [row('В словаре', fmt(ws.length)), row('Выучено', fmt(known)), row('Учу', fmt(ws.length - known)), due ? row('Пора повторить', fmt(due)) : null,
+        h('button', { class: 'btn primary', style: 'margin-top:6px', onclick: () => { rv = { mode: 'book', queue: shuffle(ws.map(w => w.id)).slice(0, 60), pos: 0, shown: false, got: [], miss: [] }; closeModal(); show('Review'); } }, 'Повторить слова из книги')]
+        : h('p', { class: 'muted', style: 'margin:0;font-size:14px', text: 'Пока нет. Коснитесь слова в книге и сохраните его — оно появится здесь.' }))];
+  const lex = h('section', { class: 'st-card', hidden: true }); kids.push(lex); // показываем, когда данные каталога пришли
+  openModal(kids.filter(Boolean));
+  let c = null; if (b.cat) { try { c = (await loadCatalog()).find(x => x.id === b.cat); } catch (e) {} }
+  if (c && c.common) lex.append(h('h4', null, 'Лексика'),
+    row('Слов в книге', fmt(c.words)),
+    row('Частые слова', c.common + '% текста'),
+    row('Редких слов', '≈ ' + fmt(Math.round(c.rare / 50) * 50)),
+    h('p', { class: 'muted', style: 'margin:4px 0 0;font-size:13px', text: 'Частые — 2000 слов, которые встречаются почти во всех книгах каталога. Чем больше их доля, тем легче читать; редкие слова — те, что придётся переводить.' }));
+  else lex.remove();
+  lex.hidden = false;
 }
 async function delBook(b) {
   if (!confirm('Удалить «' + b.title + '»? Слова и заметки из неё тоже удалятся.')) return;
@@ -699,7 +745,7 @@ function exportWords() {
 $('#wExport').onclick = exportWords;
 
 /* ================= повторение (карточки) ================= */
-const INTERVALS = [1, 3, 7, 21, 60], SWIPE = 90;
+const INTERVALS = [1, 3, 7, 21, 60], SWIPE = 90, QUICK = 5; // QUICK — короткий круг «пока жду автобус»
 let rv = null; // { mode, queue:[id], pos, shown, got:[id], miss:[id] }
 const isDue = w => (w.due || 0) <= Date.now();
 const wById = id => words.find(w => w.id === id);
@@ -709,7 +755,7 @@ function startRound(mode) {
   if (mode === 'missed') list = words.filter(w => w.missed);
   else if (mode === 'all') list = shuffle(words.slice());
   else list = words.filter(isDue).sort((a, b) => (a.due || 0) - (b.due || 0));
-  rv = { mode, queue: list.slice(0, 60).map(w => w.id), pos: 0, shown: false, got: [], miss: [] };
+  rv = { mode, queue: list.slice(0, mode === 'quick' ? QUICK : 60).map(w => w.id), pos: 0, shown: false, got: [], miss: [] };
 }
 let audioCtx = null;
 function beep(good) {
@@ -748,7 +794,7 @@ function renderReview() {
   const dueN = words.filter(isDue).length, missN = words.filter(w => w.missed).length;
   const chip = (on, label, fn, dot) => h('button', { class: 'chip' + (on ? ' on' : ''), 'aria-pressed': String(on), onclick: fn }, dot ? h('i', { class: 'dot' }) : null, label);
   box.append(h('div', { class: 'chips' },
-    chip(rv.mode === 'due', 'На сегодня · ' + dueN, () => { startRound('due'); renderReview(); }),
+    chip(rv.mode === 'due' || rv.mode === 'quick', 'На сегодня · ' + dueN, () => { startRound('due'); renderReview(); }),
     chip(rv.mode === 'missed', 'Не угаданные · ' + missN, () => { if (!missN) { toast('Не угаданных пока нет'); return; } startRound('missed'); renderReview(); }, true),
     chip(rv.mode === 'all', 'Все · ' + words.length, () => { startRound('all'); renderReview(); })));
   box.append(h('div', { class: 'bar', style: 'height:6px;border-radius:3px' }, h('i', { style: `width:${total ? Math.round(Math.min(rv.pos, total) / total * 100) : 0}%` })));
@@ -770,15 +816,18 @@ function renderReview() {
   const no = h('div', { class: 'rv-ov no' }, svgEl('<circle cx="60" cy="60" r="52" stroke-width="4" opacity=".35"/><path d="M42 42l36 36M78 42L42 78"/>', '0 0 120 120'));
   const card = h('div', { class: 'rv-card enter', role: 'button', tabindex: '0', 'aria-label': rv.shown ? 'Карточка' : 'Показать ответ' }, ok, no,
     h('span', { class: 'rv-book', text: b ? b.title : '' }));
-  if (ruFirst) card.append(h('span', { class: 'rv-tr', text: w.tr || '' }), markSentence(w.s, w.w, !rv.shown));
-  else card.append(h('span', { class: 'rv-word', lang: 'en', text: w.w }), markSentence(w.s, w.w, false));
+  // лицевая сторона — только слово (или перевод): предложение подсказывает ответ, его показываем после переворота
+  if (ruFirst) card.append(h('span', { class: 'rv-tr', text: w.tr || '' }));
+  else card.append(h('span', { class: 'rv-word', lang: 'en', text: w.w }));
   if (!rv.shown) card.append(h('span', { class: 'muted', style: 'font-size:14px', text: ruFirst ? 'Вспомните слово на английском · коснитесь, чтобы проверить' : 'Вспомните перевод · коснитесь, чтобы проверить' }));
   else {
     const back = h('div', { class: 'rv-back' },
       ruFirst ? h('span', { class: 'rv-word', lang: 'en', text: w.w }) : h('span', { class: 'rv-tr', text: w.tr || '' }),
       w.tc ? h('span', { class: 'muted', style: 'font-size:14px', text: w.tc }) : null,
-      w.exp ? h('span', { style: 'font-size:14px;color:var(--ink2)', text: w.exp }) : null);
-    const ex = Array.isArray(w.ex) ? w.ex[0] : w.ex; if (ex && ex.en) back.append(h('div', { class: 'sh-ex', style: 'text-align:left;margin-top:4px' }, h('div', { class: 'en', lang: 'en', text: ex.en }), h('div', { class: 'ru', text: ex.ru || '' })));
+      w.exp ? h('span', { class: 'rv-exp', text: w.exp }) : null,
+      w.s ? h('button', { class: 'rv-sbtn', 'aria-label': 'Прослушать предложение', onclick: ev => { ev.stopPropagation(); if (ev.detail === 0) speak(w.s, 0.85); } }, markSentence(w.s, w.w, false), ico('speak', 16)) : null,
+      w.st ? h('span', { class: 'rv-st', text: w.st }) : null);
+    const ex = Array.isArray(w.ex) ? w.ex[0] : w.ex; if (ex && ex.en && !w.s) back.append(h('div', { class: 'sh-ex', style: 'text-align:left;margin-top:4px' }, h('div', { class: 'en', lang: 'en', text: ex.en }), h('div', { class: 'ru', text: ex.ru || '' })));
     card.append(back);
   }
   card.append(h('button', { class: 'icobtn rv-speak', 'aria-label': 'Произнести', onclick: ev => { ev.stopPropagation(); speak(w.w); } }, ico('speak', 20)));
@@ -792,12 +841,13 @@ function renderReview() {
   let raf = 0;
   const setDx = d => { dx = d; cancelAnimationFrame(raf); raf = requestAnimationFrame(() => paintDx(d)); };
   const paintDx = d => { card.style.transform = `translateX(${d}px) rotate(${(d / 22).toFixed(1)}deg)`; const k = Math.min(1, Math.abs(d) / SWIPE); ok.style.opacity = d > 0 ? k : 0; no.style.opacity = d < 0 ? k : 0; ok.firstChild.style.transform = no.firstChild.style.transform = `scale(${(0.7 + 0.3 * k).toFixed(2)})`; };
-  card.addEventListener('pointerdown', e => { if (e.target.closest('.rv-speak')) return; x0 = e.clientX; moved = false; card.style.transition = 'none'; try { card.setPointerCapture(e.pointerId); } catch (er) {} });
+  let onSent = false; // касание по предложению на обороте — прочитать его, а не перевернуть карточку
+  card.addEventListener('pointerdown', e => { if (e.target.closest('.rv-speak')) return; onSent = !!e.target.closest('.rv-sbtn'); x0 = e.clientX; moved = false; card.style.transition = 'none'; try { card.setPointerCapture(e.pointerId); } catch (er) {} });
   card.addEventListener('pointermove', e => { if (x0 == null) return; const d = e.clientX - x0; if (Math.abs(d) > 6) moved = true; setDx(d); });
-  const up = () => { if (x0 == null) return; x0 = null; cancelAnimationFrame(raf); card.style.transition = ''; if (dx > SWIPE) commit(card, true); else if (dx < -SWIPE) commit(card, false); else { setDx(0); ok.style.opacity = no.style.opacity = 0; if (!moved) { rv.shown = !rv.shown; renderReview(); } } };
+  const up = () => { if (x0 == null) return; x0 = null; cancelAnimationFrame(raf); card.style.transition = ''; if (dx > SWIPE) commit(card, true); else if (dx < -SWIPE) commit(card, false); else { setDx(0); ok.style.opacity = no.style.opacity = 0; if (!moved) { if (onSent) speak(w.s, 0.85); else { rv.shown = !rv.shown; renderReview(); } } } };
   card.addEventListener('pointerup', up); card.addEventListener('pointercancel', up);
   card.addEventListener('touchmove', e => { if (x0 != null) e.preventDefault(); }, { passive: false }); // не отдаём свайп браузеру (жест «назад»)
-  card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); rv.shown = !rv.shown; renderReview(); } });
+  card.addEventListener('keydown', e => { if (e.target !== card) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); rv.shown = !rv.shown; renderReview(); } });
 }
 let committing = false;
 function commit(card, good) {
@@ -821,8 +871,11 @@ function renderResult(box) {
   box.append(h('h2', { style: 'margin:4px 0 0;font-family:var(--serif);font-size:22px;font-weight:600', text: 'Итог круга' }),
     h('section', { class: 'card', style: 'padding:14px;display:flex;flex-direction:column;gap:8px' }, h('h3', { style: 'margin:0;font-size:14px;color:var(--accent);display:flex;gap:6px;align-items:center' }, ico('check', 18), 'Угадал · ' + rv.got.length), rv.got.length ? list(rv.got) : h('span', { class: 'muted', text: '—' })),
     h('section', { class: 'card', style: 'padding:14px;display:flex;flex-direction:column;gap:8px' }, h('h3', { style: 'margin:0;font-size:14px;color:var(--warn);display:flex;gap:8px;align-items:center' }, h('i', { class: 'dot' }), 'Не угадал · ' + rv.miss.length), rv.miss.length ? list(rv.miss) : h('span', { class: 'muted', text: 'Все слова угаданы' })));
-  if (rv.miss.length) box.append(h('button', { class: 'btn primary big', onclick: () => { rv = { mode: 'missed', queue: shuffle(rv.miss.slice()), pos: 0, shown: false, got: [], miss: [] }; renderReview(); } }, 'Прогнать не угаданные · ' + rv.miss.length));
-  box.append(h('button', { class: 'btn big', onclick: () => { startRound('due'); renderReview(); } }, 'Готово'));
+  if (rv.miss.length) box.append(h('button', { class: 'btn primary big', onclick: () => { rv = { mode: 'missed', quick: rv.mode === 'quick' || rv.mode === 'book' || rv.quick, queue: shuffle(rv.miss.slice()), pos: 0, shown: false, got: [], miss: [] }; renderReview(); } }, 'Прогнать не угаданные · ' + rv.miss.length));
+  const more = words.filter(isDue).length;
+  if (rv.mode === 'quick' && more && !rv.miss.length) box.append(h('button', { class: 'btn primary big', onclick: () => { startRound('quick'); renderReview(); } }, 'Ещё ' + Math.min(QUICK, more) + ' ' + plural(Math.min(QUICK, more), 'карточка', 'карточки', 'карточек')));
+  const short = rv.mode === 'quick' || rv.quick || rv.mode === 'book';
+  box.append(h('button', { class: 'btn big', onclick: () => { startRound('due'); if (short) { rv = null; show('Lib'); } else renderReview(); } }, 'Готово'));
 }
 document.addEventListener('keydown', e => {
   if (current !== 'Review' || !rv || rv.pos >= rv.queue.length || /INPUT|TEXTAREA|SELECT/.test(e.target instanceof Element ? e.target.tagName : '')) return;
@@ -969,6 +1022,7 @@ async function openBook(b, atCfi) {
     if (n < 3 && !firstTry) { LS.set('lr_taphint', n + 1); tapHintT = setTimeout(() => { $('#tapHint').classList.add('on'); tapHintT = setTimeout(() => $('#tapHint').classList.remove('on'), 2600); }, 2400); } }
   rendition.on('relocated', onRelocated);
   if (rendition.location && rendition.location.start) onRelocated(rendition.location);
+  setTimeout(() => { if (book === bk) askTheme(); }, 6000); // после подсказки про меню
   if (holding) setTimeout(() => { if (hold === holding && !holding.err) { hold = null; if (book === bk && rendition && rendition.location) onRelocated(rendition.location); } }, 6000); // страницы считаются долго — не ждём
   // место не нашлось — вернуться по проценту, когда страницы посчитаны; потом снова сохраняем
   const settle = async () => {
@@ -1344,6 +1398,7 @@ function paintBubble(c, r, done, err) {
     phraseList(r, 3),
     h('div', { class: 'bb-acts' },
       err ? (err.needKey ? h('button', { class: 'btn primary', onclick: () => openKey('Reader') }, 'Добавить ключ') : h('button', { class: 'btn', onclick: () => translate(c) }, 'Повторить')) : null,
+      h('button', { class: 'btn', 'aria-label': 'Прослушать предложение', title: 'Прослушать предложение', onclick: () => speak(c.sentence, 0.85) }, ico('speak', 18)),
       h('button', { class: 'btn', 'aria-label': 'Цитата', title: 'Цитата', onclick: () => addQuote(c) }, ico('quote', 18)),
       h('button', { class: 'btn', 'aria-label': 'Заметка', title: 'Заметка', onclick: () => openNote(c) }, ico('note', 18)),
       h('span', { style: 'flex:1' }),
@@ -1396,7 +1451,7 @@ function paint(c, r, done) {
   if (r.explanation) body.append(h('div', { class: 'sh-sec full-only' }, h('h4', null, 'Почему так'), h('p', { text: r.explanation })));
   const bookP = h('p', { class: 'book', lang: 'en' }); const i = c.sentence.toLowerCase().indexOf(c.sel.toLowerCase());
   if (i >= 0) bookP.append(c.sentence.slice(0, i), h('mark', { text: c.sentence.slice(i, i + c.sel.length) }), c.sentence.slice(i + c.sel.length)); else bookP.textContent = c.sentence;
-  body.append(h('div', { class: 'sh-sec full-only' }, h('h4', null, 'В книге'), bookP, r.sentence_translation ? h('p', { class: 'muted', style: 'font-size:14px;margin-top:4px', text: r.sentence_translation }) : null));
+  body.append(h('div', { class: 'sh-sec full-only' }, h('h4', { class: 'h4-act' }, 'В книге', h('button', { class: 'say', 'aria-label': 'Прослушать предложение', onclick: () => speak(c.sentence, 0.85) }, ico('speak', 16), 'Прослушать')), bookP, r.sentence_translation ? h('p', { class: 'muted', style: 'font-size:14px;margin-top:4px', text: r.sentence_translation }) : null));
   if (ex.length) body.append(h('div', { class: 'sh-sec full-only' }, h('h4', null, 'Пример'), h('div', { class: 'exs' }, ex.slice(0, 1).map(x => h('div', { class: 'row' }, h('div', null, h('div', { class: 'en', lang: 'en', text: x.en }), h('div', { class: 'ru', text: x.ru || '' })), iconBtn('speak', 'Произнести пример', () => speak(x.en), 'icobtn', 18))))));
   body.append(h('div', { class: 'sh-acts peek-only' },
     h('button', { class: 'btn', onclick: () => addQuote(c) }, ico('quote', 18), 'Цитата'),
@@ -1418,21 +1473,75 @@ function toggleSave(c, r) {
   try { rendition.getContents().forEach(ct => underlineSaved(ct)); } catch (e) {}
 }
 
+/* --- вечером предложить ночную тему, утром — вернуть дневную. Спрашиваем раз в вечер (утро), решает человек --- */
+function askTheme() {
+  const hr = new Date().getHours(), night = hr >= 21 || hr < 6, morning = hr >= 7 && hr < 20;
+  const k6 = new Date(Date.now() - 6 * 3600e3), key = k6.getFullYear() + '-' + (k6.getMonth() + 1) + '-' + k6.getDate() + (night ? 'n' : 'd'); // по местному времени; вечер и ночь до 6 утра — один «вечер»
+  let q = '', apply = null;
+  if (night && S.theme !== 'night') { q = 'Включить ночную тему?'; apply = () => { S.dayTheme = S.theme; S.theme = 'night'; }; }
+  else if (morning && S.theme === 'night' && S.dayTheme) { q = 'Вернуть дневную тему?'; apply = () => { S.theme = S.dayTheme; S.dayTheme = ''; }; }
+  if (!q || LS.get('lr_themeask', '') === key || current !== 'Reader') return;
+  const bar = $('#askBar'), close = () => { LS.set('lr_themeask', key); bar.classList.remove('on'); clearTimeout(askT); };
+  bar.replaceChildren(h('span', { text: q }),
+    h('button', { class: 'ab-yes', onclick: () => { apply(); saveS(); applyReader(); setTimeout(() => { try { rendition.getContents().forEach(c => underlineSaved(c)); } catch (e) {} }, 400); close(); } }, 'Да'),
+    h('button', { class: 'ab-no', onclick: () => { if (!night) { S.dayTheme = ''; saveS(); } close(); } }, 'Нет')); // утром «Нет» — больше не предлагать вернуть
+  bar.classList.add('on'); clearTimeout(askT); askT = setTimeout(close, 12000);
+}
+let askT = null;
+
 /* --- подчёркивание сохранённых слов во всём тексте --- */
-const ulAdded = new Set();
+const ulAdded = new Map(); // документ главы → его подчёркивания: в прокрутке видно несколько глав сразу
+// формы слова: acknowledge → acknowledges, acknowledged, acknowledging; study → studies, studied
+function wordForms(x) {
+  const out = new Set([x]); if (!/^[a-z]+$/.test(x) || x.length < 3) return out;
+  // только надёжные окончания: -er/-est/-ly и удвоение с -er дают чужие слова (let → letter, for → forest)
+  out.add(x + 's');
+  if (/(s|x|z|ch|sh|o)$/.test(x)) out.add(x + 'es');
+  if (x.endsWith('e')) { out.add(x + 'd'); out.add(x.slice(0, -1) + 'ing'); }
+  else { out.add(x + 'ed'); out.add(x + 'ing'); }
+  if (/[^aeiou]y$/.test(x)) { out.add(x.slice(0, -1) + 'ies'); out.add(x.slice(0, -1) + 'ied'); }
+  if (/[^aeiou][aeiou][bdgmnprt]$/.test(x) && x.length <= 5) { const d = x + x.slice(-1); out.add(d + 'ed'); out.add(d + 'ing'); }
+  return out;
+}
+// состояние слова в книге: пора повторить важнее, чем «учу», «учу» важнее, чем «выучено»
+const UL_RANK = { 'lr-due': 3, 'lr-saved': 2, 'lr-known': 1 };
+// новое слово (ещё ни разу не повторяли) — «учу», а не «пора повторить»
+function ulState(w) { return isDue(w) && (w.seen || w.missed) ? 'lr-due' : (w.box || 0) >= INTERVALS.length ? 'lr-known' : 'lr-saved'; }
+const apos = s => s.replace(/’/g, "'"); // в книгах апостроф бывает и прямой, и типографский
+function ulIndex() {
+  const single = new Map(), phrases = new Map();
+  const put = (m, k, st) => { if (!m.has(k) || UL_RANK[st] > UL_RANK[m.get(k)]) m.set(k, st); };
+  for (const w of words) {
+    const st = ulState(w);
+    for (const raw of [w.w, w.base]) {
+      const x = apos(norm(raw).toLowerCase()); if (x.length < 2 || x.length > 60) continue;
+      // фразы и слова с апострофом или дефисом (don't, well-known) — через регулярное выражение
+      if (!/^[a-zÀ-ÿ]+$/.test(x)) put(phrases, x, st); else wordForms(x).forEach(f => put(single, f, st));
+    }
+  }
+  return { single, phrases };
+}
 function underlineSaved(contents) {
   if (!contents || !rendition) return;
-  ulAdded.forEach(cfi => { try { rendition.annotations.remove(cfi, 'underline'); } catch (e) {} }); ulAdded.clear();
-  const list = [...new Set(words.map(w => w.w.toLowerCase()).filter(w => w.length > 1 && w.length < 60))];
-  if (!list.length) return;
-  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-  const re = new RegExp('(^|[^A-Za-zÀ-ÿ])(' + list.sort((a, b) => b.length - a.length).map(esc).join('|') + ')(?![A-Za-zÀ-ÿ])', 'gi');
+  const mine = ulAdded.get(contents.document) || new Set(); ulAdded.set(contents.document, mine);
+  // главы, которых уже нет: epub.js хранит их подчёркивания и вернёт при повторном показе — убираем совсем
+  for (const [d, set] of ulAdded) if (d !== contents.document && !d.defaultView) { set.forEach(cfi => { try { rendition.annotations.remove(cfi, 'underline'); } catch (e) {} }); ulAdded.delete(d); }
+  mine.forEach(cfi => { try { rendition.annotations.remove(cfi, 'underline'); } catch (e) {} }); mine.clear();
+  if (S.ul === false || !words.length) return;
+  const { single, phrases } = ulIndex();
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+').replace(/'/g, "['’]");
+  const reP = phrases.size ? new RegExp('(^|[^A-Za-zÀ-ÿ])(' + [...phrases.keys()].sort((a, b) => b.length - a.length).map(esc).join('|') + ')(?![A-Za-zÀ-ÿ])', 'gi') : null;
+  const reW = /[A-Za-zÀ-ÿ]+/g;
   const doc = contents.document, walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT); let n, count = 0;
-    while ((n = walker.nextNode()) && count < 400) {
-    re.lastIndex = 0; let m;
-    while ((m = re.exec(n.data)) && count < 400) {
-      const a = m.index + m[1].length, b = a + m[2].length; const r = doc.createRange(); r.setStart(n, a); r.setEnd(n, b);
-      try { const cfi = contents.cfiFromRange(r); rendition.annotations.underline(cfi, {}, null, 'lr-saved', { 'stroke-opacity': '1', 'mix-blend-mode': 'normal' }); ulAdded.add(cfi); count++; } catch (e) {}
+  const mark = (node, a, b, st) => { const r = doc.createRange(); r.setStart(node, a); r.setEnd(node, b); try { const cfi = contents.cfiFromRange(r); rendition.annotations.underline(cfi, {}, null, st, { 'stroke-opacity': '1', 'mix-blend-mode': 'normal' }); mine.add(cfi); count++; } catch (e) {} };
+  while ((n = walker.nextNode()) && count < 400) {
+    const taken = []; let m;
+    if (reP) { reP.lastIndex = 0; while ((m = reP.exec(n.data)) && count < 400) { const a = m.index + m[1].length, b = a + m[2].length; taken.push([a, b]); mark(n, a, b, phrases.get(apos(norm(m[2]).toLowerCase())) || 'lr-saved'); } }
+    reW.lastIndex = 0;
+    while ((m = reW.exec(n.data)) && count < 400) {
+      const st = single.get(m[0].toLowerCase()); if (!st) continue;
+      const a = m.index, b = a + m[0].length; if (taken.some(([x, y]) => a < y && b > x)) continue; // слово уже внутри подчёркнутой фразы
+      mark(n, a, b, st);
     }
   }
 }
@@ -1503,7 +1612,9 @@ function renderAa() {
     h('div', { class: 'aa-row' }, h('span', null, 'Чтение'), seg([['paged', 'Страницы'], ['scroll', 'Прокрутка']], S.flow || 'paged', v => { if ((S.flow || 'paged') === v) return; S.flow = v; saveS(); closeModal(); if (curBook) openBook(curBook, lastLoc && lastLoc.start && lastLoc.start.cfi); }, 'Режим чтения')),
     h('div', { class: 'aa-row' }, h('span', null, 'Интервал'), seg([['s', 'Плотно'], ['m', 'Обычно'], ['l', 'Свободно']], S.lh, v => { S.lh = v; upd(); }, 'Интервал')),
     h('div', { class: 'aa-row' }, h('span', null, 'Поля'), seg([['s', 'Узкие'], ['m', 'Средние'], ['l', 'Широкие']], S.margin, v => { S.margin = v; upd(); }, 'Поля')),
-    h('div', { class: 'aa-row' }, h('span', null, 'Тема'), h('div', { class: 'themes', role: 'radiogroup', 'aria-label': 'Тема' }, Object.entries(T).map(([k, [t, bg, fg]]) => h('button', { role: 'radio', 'aria-checked': String(S.theme === k), style: `background:${bg};color:${fg}`, onclick: () => { S.theme = k; upd(); } }, t))))
+    h('div', { class: 'aa-row' }, h('span', null, 'Словарь'), seg([['on', 'Подчёркивать'], ['off', 'Нет']], S.ul === false ? 'off' : 'on', v => { S.ul = v === 'on'; upd(); }, 'Слова из словаря')),
+    S.ul === false ? null : h('p', { class: 'aa-legend' }, h('i', { class: 'lg-saved' }), 'учу', h('i', { class: 'lg-due' }), 'пора повторить', h('i', { class: 'lg-known' }), 'выучено'),
+    h('div', { class: 'aa-row' }, h('span', null, 'Тема'), h('div', { class: 'themes', role: 'radiogroup', 'aria-label': 'Тема' }, Object.entries(T).map(([k, [t, bg, fg]]) => h('button', { role: 'radio', 'aria-checked': String(S.theme === k), style: `background:${bg};color:${fg}`, onclick: () => { S.theme = k; S.dayTheme = ''; upd(); } }, t))))
   );
 }
 $('#rBack2').onclick = () => $('#rBack').click();
@@ -1584,7 +1695,10 @@ function afterPull() {
   updBadge();
   if (current === 'Lib') renderLib(); else if (current === 'Words') renderWords();
   if (current !== 'Reader') applyTheme();
+  refreshUl();
 }
+// состояние слов могло измениться (повторение, другое устройство) — перерисовать подчёркивания в открытой книге
+function refreshUl() { try { if (rendition) rendition.getContents().forEach(c => underlineSaved(c)); } catch (e) {} }
 async function afterLogin() {
   if (!user || loggedFor === user.id) return; loggedFor = user.id;
   const prev = LS.get('lr_uid', '');

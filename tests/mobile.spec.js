@@ -149,3 +149,83 @@ test('слова: состояние повторения и выгрузка с
   expect(txt).toContain('Pride and Prejudice');
   expect(errors).toEqual([]);
 });
+
+test('карточка: предложение только на обороте, касание по нему не переворачивает', async ({ browser }) => {
+  const { page, errors } = await phone(browser, SIZES[1]);
+  await page.addInitScript(() => { window.__said = []; speechSynthesis.speak = u => window.__said.push(u.text); });
+  await page.goto('/');
+  await page.locator('#tabbar button[data-go=Review]').click();
+  const card = page.locator('.rv-card');
+  await expect(card).toContainText('countenance');
+  await expect(card.locator('.rv-sent')).toHaveCount(0);
+  await card.click();
+  await expect(card.locator('.rv-sent')).toContainText('picture of calm');
+  await card.locator('.rv-sbtn').click();
+  await expect(card.locator('.rv-sent')).toBeVisible(); // остались на обороте
+  expect(await page.evaluate(() => window.__said)).toEqual(['Her countenance was a picture of calm.']);
+  expect(errors).toEqual([]);
+});
+
+test('слова из словаря подчёркнуты в книге, с формами и по состоянию', async ({ browser }) => {
+  const now = Date.now(), id = 'cat-jane-austen_pride-and-prejudice';
+  const { page, errors } = await phone(browser, SIZES[1], { seed: Object.assign({}, SEED, { lr_tried: true, lr_words: [
+    { id: 'a', bookId: id, w: 'acknowledge', tr: 'признавать', t: T0, box: 1, due: now + 3 * 864e5 }, // форма acknowledged
+    { id: 'b', bookId: id, w: 'fortune', tr: 'состояние', t: T0, box: 1, seen: T0, due: now - 1000 }, // пора повторить
+    { id: 'd', bookId: id, w: 'possession', tr: 'владение', t: now, box: 0, due: now }, // только что сохранили — «учу»
+    { id: 'c', bookId: id, w: 'truth', tr: 'истина', t: T0, box: 5, due: now + 60 * 864e5 }] }) });
+  await page.goto('/');
+  await page.locator('#contBox button', { hasText: 'Читать' }).click();
+  await expect(page.locator('#loading')).toBeHidden({ timeout: 30000 });
+  await expect(page.locator('#viewer g.lr-saved').first()).toBeAttached({ timeout: 10000 });
+  await expect(page.locator('#viewer g.lr-due').first()).toBeAttached();
+  await expect(page.locator('#viewer g.lr-known').first()).toBeAttached();
+  const fortunes = ((await page.frameLocator('#viewer iframe').first().locator('body').textContent()).match(/fortunes?/gi) || []).length;
+  expect(await page.locator('#viewer g.lr-due').count(), 'оранжевым только fortune, не новое possession').toBe(fortunes);
+  expect(errors).toEqual([]);
+});
+
+test('вечером читалка предлагает ночную тему, «Да» включает её', async ({ browser }) => {
+  const { page, errors } = await phone(browser, SIZES[1], { seed: Object.assign({}, SEED, { lr_tried: true }) });
+  const d = new Date(); d.setHours(22, 30, 0, 0);
+  await page.clock.install({ time: d });
+  await page.goto('/');
+  await page.locator('#contBox button', { hasText: 'Читать' }).click();
+  await expect(page.locator('#loading')).toBeHidden({ timeout: 30000 });
+  await page.clock.runFor(7000);
+  await expect(page.locator('#askBar')).toHaveClass(/on/);
+  await expect(page.locator('#askBar')).toContainText('ночную тему');
+  await page.locator('#askBar .ab-yes').click();
+  await expect(page.locator('body')).toHaveAttribute('data-theme', 'night');
+  // второй раз за вечер не спрашиваем
+  expect(await page.evaluate(() => localStorage.getItem('lr_themeask'))).toBeTruthy();
+  expect(errors).toEqual([]);
+});
+
+test('библиотека: «Пора повторить» запускает круг из 5 карточек', async ({ browser }, info) => {
+  const ws = Array.from({ length: 7 }, (_, i) => ({ id: 'q' + i, bookId: 'cat-jane-austen_pride-and-prejudice', w: 'word' + i, tr: 'слово', s: 'A word' + i + '.', t: T0, box: 1, seen: T0, due: T0 }));
+  const { page, errors } = await phone(browser, SIZES[0], { seed: Object.assign({}, SEED, { lr_words: ws }) });
+  await page.goto('/');
+  const q = page.locator('#contBox .card.quick');
+  await expect(q).toContainText('Пора повторить'); await expect(q).toContainText('7 слов · начнём с 5');
+  await info.attach('библиотека', { body: await page.screenshot(), contentType: 'image/png' });
+  await q.getByRole('button', { name: 'Начать' }).click();
+  await expect(page.locator('#sReview')).toHaveClass(/on/);
+  await expect(page.locator('#revBox header')).toContainText('1 из 5');
+  expect(errors).toEqual([]);
+});
+
+test('статистика книги: прогресс, слова из книги и лексика', async ({ browser }, info) => {
+  const { page, errors } = await phone(browser, SIZES[0]);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Статистика «Pride and Prejudice»' }).click();
+  const m = page.locator('#modalBody');
+  await expect(m).toContainText('Прочитано23%');
+  await expect(m).toContainText('В словаре1');
+  await expect(m).toContainText('Частые слова');
+  await expect(m).not.toContainText('null');
+  await info.attach('статистика', { body: await page.screenshot(), contentType: 'image/png' });
+  await m.getByRole('button', { name: 'Повторить слова из книги' }).click();
+  await expect(page.locator('#sReview')).toHaveClass(/on/);
+  await expect(page.locator('.rv-card')).toContainText('countenance');
+  expect(errors).toEqual([]);
+});

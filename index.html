@@ -139,6 +139,11 @@ body.scrollmode #viewer .epub-container{-webkit-overflow-scrolling:touch}
 #tapHint{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:999px;font-size:14px;white-space:nowrap;z-index:12;opacity:0;pointer-events:none;transition:opacity .3s}
 #tapHint.on{opacity:.92}
 #wordHint{position:absolute;left:50%;bottom:calc(var(--safe-b) + 56px);transform:translate(-50%,8px);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:999px;font-size:15px;width:max-content;max-width:calc(100% - 32px);text-align:center;z-index:12;opacity:0;pointer-events:none;transition:opacity .3s,transform .3s;box-shadow:0 6px 16px rgba(0,0,0,.18)}
+#askBar{position:absolute;left:50%;top:calc(var(--safe-t) + 58px);transform:translate(-50%,-8px);z-index:13;display:flex;align-items:center;gap:6px;background:var(--ink);color:var(--paper);padding:6px 6px 6px 16px;border-radius:999px;font-size:14px;width:max-content;max-width:calc(100% - 24px);box-shadow:0 6px 16px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
+#askBar.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#askBar button{border:0;border-radius:999px;min-height:36px;padding:0 14px;font:inherit;font-weight:600}
+#askBar .ab-yes{background:var(--paper);color:var(--ink)}
+#askBar .ab-no{background:transparent;color:var(--paper);opacity:.8}
 #wordHint.on{opacity:.94;transform:translate(-50%,0)}
 body.chrome #wordHint,#nextCh.on~#wordHint{opacity:0}
 #mini{position:absolute;left:var(--gut);right:var(--gut);bottom:calc(var(--safe-b) + 12px);display:flex;justify-content:center;align-items:center;gap:8px;font-size:12px;color:var(--muted);pointer-events:none;white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -159,9 +164,12 @@ body.chrome #mini{opacity:0}
 /* отметки epub.js (svg поверх страницы) */
 #viewer svg{mix-blend-mode:multiply}
 body[data-theme=night] #viewer svg{mix-blend-mode:screen}
-#viewer g.lr-saved rect{stroke:none!important}
+#viewer g.lr-saved rect,#viewer g.lr-due rect,#viewer g.lr-known rect{stroke:none!important}
 #viewer g.lr-saved line{stroke:var(--saved-ul,#6FAF98)!important;stroke-width:2px!important;stroke-linecap:round}
-body[data-theme=sepia]{--saved-ul:#5E9C84} body[data-theme=night]{--saved-ul:#4E8C77}
+/* слово из словаря, которое пора повторить — тёплый цвет; выученное — тонкий пунктир */
+#viewer g.lr-due line{stroke:var(--due-ul,#D9944A)!important;stroke-width:2px!important;stroke-linecap:round}
+#viewer g.lr-known line{stroke:var(--saved-ul,#6FAF98)!important;stroke-width:1.5px!important;stroke-dasharray:2 3;opacity:.7}
+body[data-theme=sepia]{--saved-ul:#5E9C84;--due-ul:#C67F33} body[data-theme=night]{--saved-ul:#4E8C77;--due-ul:#A8733A}
 
 /* ---------- translation sheet ---------- */
 #sheet{position:fixed;z-index:30;left:0;right:0;bottom:0;background:var(--card);border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.16);transform:translateY(calc(100% + 48px));transition:transform .26s cubic-bezier(.2,.8,.3,1),max-height .26s ease;max-height:52vh;display:flex;flex-direction:column}
@@ -273,6 +281,23 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 .rv-tr{font-size:28px;font-weight:700;color:var(--accent);line-height:1.2}
 .rv-sent{font-family:var(--serif);font-size:17px;line-height:1.55;color:var(--ink2)}
 .rv-blank{display:inline-block;border-bottom:2px solid var(--ink);min-width:60px}
+.aa-legend{margin:-6px 0 0;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.aa-legend i{display:inline-block;width:18px;height:0;border-bottom:2px solid var(--saved-ul,#6FAF98);margin-left:6px}
+.aa-legend i:first-child{margin-left:0}
+.aa-legend .lg-due{border-color:var(--due-ul,#D9944A)}
+.aa-legend .lg-known{border-bottom-style:dotted}
+.card.quick{display:flex;align-items:center;gap:12px;padding:14px;margin-top:12px}
+.q-ic{width:40px;height:40px;flex:none;border-radius:12px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center}
+.st-card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.st-card h4{margin:0;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.st-row{display:flex;justify-content:space-between;gap:12px;font-size:15px}
+.h4-act{display:flex;align-items:center;gap:8px}
+.say{margin-left:auto;display:inline-flex;align-items:center;gap:4px;border:0;background:transparent;color:var(--accent);font:inherit;font-size:13px;text-transform:none;letter-spacing:0;min-height:32px;padding:0 4px}
+.rv-sbtn{display:block;border:0;background:transparent;padding:0;text-align:center;font:inherit;color:inherit}
+.rv-sbtn .rv-sent{font-size:15px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.rv-sbtn svg{display:inline-block;vertical-align:-3px;margin-left:4px;color:var(--accent);width:16px;height:16px}
+.rv-exp{font-size:14px;color:var(--ink2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.rv-st{font-size:13px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .rv-back{display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:14px;border-top:1px solid var(--line);width:100%}
 .rv-speak{position:absolute;right:8px;top:8px;color:var(--muted);z-index:3}
 .rv-hints{display:flex;justify-content:space-between;align-items:flex-end}
@@ -495,6 +520,7 @@ body[data-theme=night] .cat-ad{color:#FBF2D6}
   body.reading #rtop{transform:none;opacity:1}
   body.reading #viewer{top:calc(var(--safe-t) + 76px)}
   #tapHint{display:none}
+  #askBar{top:calc(var(--safe-t) + 86px)}
   body.sheet-open #sReader{right:400px}
   body.sheet-open #rtop,body.sheet-open #rbottom{right:0}
   #hint{display:none}
@@ -654,6 +680,7 @@ body[data-theme=night] .cat-ad{color:#FBF2D6}
   <button id="nextCh" class="btn dark">Следующая глава<svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="m9 6 6 6-6 6"/></svg></button>
   <div id="mini"><span id="miniBar" aria-hidden="true"><i></i></span><span id="miniPct"></span></div>
   <div id="tapHint" aria-hidden="true">Меню — коснитесь поля сверху или снизу</div>
+  <div id="askBar" role="dialog" aria-label="Тема"></div>
   <div id="wordHint" role="status" aria-hidden="true">Коснитесь слова — появится перевод</div>
   <div id="loading"><span class="spin"></span>Открываю книгу…</div>
   <header id="rtop"><div class="row">
