@@ -6,7 +6,7 @@
 (() => {
 'use strict';
 
-const VER = 44; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 45; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -586,6 +586,8 @@ function renderLib() {
       h('button', { class: 'btn dark', onclick: () => { startRound('quick'); show('Review'); } }, 'Начать')));
   }
   if (!books.length) { list.append(h('li', { class: 'empty', style: 'display:block;border:0' }, h('div', { style: 'font-family:var(--serif);font-size:18px;color:var(--ink);margin-bottom:6px', text: 'Пока нет книг' }), 'Нажмите «+ EPUB» и выберите файл книги на английском — или возьмите бесплатную классику из каталога.', h('div', { style: 'margin-top:14px' }, h('button', { class: 'btn primary', onclick: openCatalog }, 'Открыть каталог')))); return; }
+  // книги каталога, которые ещё не сохранены целиком, докачиваются фоном (по одной)
+  setTimeout(saveAllCats, 2000);
   sorted.forEach(b => {
     const pct = Math.round((b.pct || 0) * 100);
     const status = b.pct >= 0.995 ? h('div', { style: 'display:flex;align-items:center;gap:6px;font-size:13px;color:var(--accent);font-weight:600' }, ico('check', 16), 'Прочитано')
@@ -593,7 +595,8 @@ function renderLib() {
       : h('div', { class: 'muted', style: 'font-size:13px', text: 'Новая книга' });
     list.append(h('li', null,
       h('button', { class: 'open', onclick: () => openBook(b) }, coverEl(b, 52, 76, 8),
-        h('div', { style: 'flex:1;min-width:0;display:flex;flex-direction:column;gap:4px' }, h('div', { class: 't', text: b.title }), h('div', { class: 'muted', style: 'font-size:14px', text: b.author || '' }), status)),
+        h('div', { style: 'flex:1;min-width:0;display:flex;flex-direction:column;gap:4px' }, h('div', { class: 't', text: b.title }), h('div', { class: 'muted', style: 'font-size:14px', text: b.author || '' }), status,
+          b.cat ? h('div', { class: 'muted', 'data-cat': b.cat, hidden: true, style: 'font-size:12px' }) : null)),
       h('button', { class: 'icobtn', 'aria-label': 'Статистика «' + b.title + '»', style: 'color:var(--muted)', onclick: () => openStats(b) }, ico('chart', 20)),
       h('button', { class: 'icobtn', 'aria-label': 'Удалить «' + b.title + '»', style: 'color:var(--muted)', onclick: () => delBook(b) }, ico('trash', 20))));
   });
@@ -630,7 +633,7 @@ async function openStats(b) {
 }
 async function delBook(b) {
   if (!confirm('Удалить «' + b.title + '»? Слова и заметки из неё тоже удалятся.')) return;
-  await files.del(b.id); files.del(b.id + '#loc1000');
+  await files.del(b.id); files.del(b.id + '#loc1000'); if (b.cat) dropCat(b.cat);
   if (CLOUD && user && !b.cat) { try { await sb.storage.from('books').remove([bookPath(b)]); } catch (e) {} }
   books = books.filter(x => x.id !== b.id); words = words.filter(w => w.bookId !== b.id); notes = notes.filter(n => n.bookId !== b.id); marks = marks.filter(m => m.bookId !== b.id);
   saveBooks(); saveWords(); saveNotes(); saveMarks(); renderLib(); updBadge();
@@ -683,21 +686,47 @@ function renderCatalog() {
     h('p', { style: 'margin:-8px 0 -8px;font-size:13px;color:var(--muted)' }, (lv === 'all' ? 'Все уровни' : lv + ' · ' + (LEVELS.find(x => x[0] === lv) || ['', ''])[1].toLowerCase()) + ' · ' + list.length + ' ' + plural(list.length, 'книга', 'книги', 'книг'), S.level && lv === S.level ? h('b', { style: 'color:var(--accent);font-weight:600' }, ' · ваш уровень') : null),
     h('ul', { class: 'cat-list' }, items.length ? items : h('li', { class: 'muted', text: 'Нет книг этого уровня' })));
 }
-const catLoading = new Set(); // книги каталога, которые уже скачиваются: повторное нажатие не добавит вторую копию
 async function addFromCatalog(x, btn) {
-  if (books.some(b => b.cat === x.id) || catLoading.has(x.id)) return;
-  catLoading.add(x.id);
-  btn.disabled = true; btn.replaceChildren(h('span', { class: 'spin' }), ' Скачиваю…');
-  try {
-    const buf = await fetchBuf('catalog/' + x.id + '.epub', p => btn.replaceChildren(h('span', { class: 'spin' }), ' Скачиваю… ' + p + '%'));
-    const nb = { id: 'cat-' + x.id, cat: x.id, title: x.title, author: x.author, cover: 'catalog/covers/' + x.id + '.jpg', added: Date.now(), up: true, pct: 0 };
-    await files.put(nb.id, buf);
-    if (books.some(b => b.cat === x.id)) { renderCatalog(); return; } // пока качали, книга пришла с другого устройства
-    books.unshift(nb); saveBooks(); renderLib(); buzz(10);
-    toast('Добавлено: ' + x.title); renderCatalog();
-  } catch (e) { btn.disabled = false; btn.textContent = 'Повторить'; toast(navigator.onLine ? 'Не удалось скачать книгу. Попробуйте ещё раз.' : 'Нет интернета. Добавьте книгу, когда связь вернётся.', 4000); }
-  finally { catLoading.delete(x.id); }
+  if (books.some(b => b.cat === x.id)) return;
+  // качать заранее не нужно: книга откроется по главам, а целиком сохранится фоном для чтения без сети
+  const nb = { id: 'cat-' + x.id, cat: x.id, title: x.title, author: x.author, cover: 'catalog/covers/' + x.id + '.jpg', added: Date.now(), up: true, pct: 0 };
+  books.unshift(nb); saveBooks(); renderLib(); buzz(10);
+  toast('Добавлено: ' + x.title); renderCatalog();
+  saveCat(x.id);
 }
+/* --- книги каталога по главам: catalog/books/<id>/ (catalog/unpack.js), сохранённое для чтения без сети — в Cache Storage --- */
+const BOOKS_CACHE = 'lr-books'; // sw.js его не трогает при обновлении сайта
+const catDir = id => 'catalog/books/' + id + '/';
+const catSaved = LS.get('lr_catsaved', {}); // id → true: книга сохранена целиком на этом устройстве
+const catSaving = new Map(); // id → доля 0…1, пока идёт фоновая загрузка
+async function saveCat(id) {
+  if (catSaved[id] || catSaving.has(id) || !('caches' in window) || !navigator.onLine) return;
+  catSaving.set(id, 0);
+  try {
+    // у тех, кто добавил книгу раньше, она уже лежит целиком в IndexedDB — второй раз не качаем
+    if (await files.get('cat-' + id).catch(() => null)) { catSaved[id] = true; LS.set('lr_catsaved', catSaved); return; }
+    const cache = await caches.open(BOOKS_CACHE), dir = catDir(id);
+    const list = await (await fetch(dir + 'files.json', { cache: 'no-cache' })).json();
+    const urls = [dir + 'files.json', ...list.files.map(f => dir + f.split('/').map(encodeURIComponent).join('/'))];
+    let done = 0, i = 0;
+    // по 4 файла сразу; уже сохранённое (например, прочитанные главы) не качаем заново
+    const worker = async () => { while (i < urls.length) { const u = urls[i++]; if (!(await cache.match(u))) await cache.add(u); done++; catSaving.set(id, done / urls.length); if (current === 'Lib' && !(done % 10)) updCatStatus(); } };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    catSaved[id] = true; LS.set('lr_catsaved', catSaved);
+  } catch (e) { console.warn('saveCat', id, e); } // нет сети — докачаем при следующем открытии
+  finally { catSaving.delete(id); if (current === 'Lib') updCatStatus(); }
+}
+let savingAll = false;
+async function saveAllCats() {
+  if (savingAll) { updCatStatus(); return; } savingAll = true;
+  try { for (const b of books.slice()) if (b.cat && !catSaved[b.cat]) await saveCat(b.cat); } finally { savingAll = false; }
+}
+async function dropCat(id) {
+  delete catSaved[id]; LS.set('lr_catsaved', catSaved);
+  try { const cache = await caches.open(BOOKS_CACHE), dir = new URL(catDir(id), location.href).href; for (const r of await cache.keys()) if (r.url.startsWith(dir)) await cache.delete(r); } catch (e) {}
+}
+// строка «Сохраняю для чтения без сети… 40%» у книги в библиотеке
+function updCatStatus() { $$('#bookList [data-cat]').forEach(el => { const p = catSaving.get(el.dataset.cat); el.textContent = p != null ? 'Сохраняю для чтения без сети… ' + Math.round(p * 100) + '%' : ''; el.hidden = p == null; }); }
 $('#catBtn').onclick = openCatalog;
 
 /* ================= слова ================= */
@@ -960,22 +989,20 @@ async function openBook(b, atCfi) {
   clearTimeout(progT); progT = null;
   const holding = hold = !atCfi && b.cfi ? { pct: b.pct || 0, err: '' } : null;
   let buf; try { buf = await files.get(b.id); } catch (e) {}
-  if (!buf && b.cat) {
-    $('#loading').lastChild.textContent = 'Скачиваю книгу…';
-    try { buf = await fetchBuf('catalog/' + b.cat + '.epub', p => { if (my === openSeq) $('#loading').lastChild.textContent = 'Скачиваю книгу… ' + p + '%'; }); await files.put(b.id, buf); } catch (e) { console.warn(e); }
-    if (my === openSeq) $('#loading').lastChild.textContent = 'Открываю книгу…';
-  }
+  // книга каталога без старой полной копии: читаем по главам прямо с сайта, целиком докачивается фоном (saveCat)
+  const stream = !buf && !!b.cat;
   if (!buf && CLOUD && user && !b.cat) {
     $('#loading').lastChild.textContent = 'Скачиваю книгу…';
     try { const r = await sb.storage.from('books').download(bookPath(b)); if (r.error) throw r.error; buf = await r.data.arrayBuffer(); await files.put(b.id, buf); } catch (e) { console.warn(e); }
     if (my === openSeq) $('#loading').lastChild.textContent = 'Открываю книгу…';
   }
   if (stale()) return;
-  if (!buf) { $('#loading').style.display = 'none'; toast(!navigator.onLine || sync.offline ? 'Эта книга ещё не скачана на устройство. Откройте её, когда появится интернет.' : b.cat || CLOUD ? 'Не удалось скачать книгу. Проверьте интернет и попробуйте ещё раз.' : 'Файла этой книги нет в этом браузере. Добавьте EPUB заново.', 5000); show('Lib'); return; }
+  if (!buf && !stream) { $('#loading').style.display = 'none'; toast(!navigator.onLine || sync.offline ? 'Эта книга ещё не скачана на устройство. Откройте её, когда появится интернет.' : b.cat || CLOUD ? 'Не удалось скачать книгу. Проверьте интернет и попробуйте ещё раз.' : 'Файла этой книги нет в этом браузере. Добавьте EPUB заново.', 5000); show('Lib'); return; }
   try { await loadEpub(); } catch (e) { if (stale()) return; $('#loading').style.display = 'none'; toast(e.message, 5000); show('Lib'); return; }
   if (stale()) return;
-  const bk = ePub(buf); book = bk;
-  const failOpen = e => { if (book !== bk) return; logErr('open', e); $('#loading').style.display = 'none'; toast('Не удалось открыть книгу: файл повреждён или это не EPUB.', 5000); hold = null; book = null; try { bk.destroy(); } catch (e2) {} show('Lib'); };
+  const bk = stream ? ePub(new URL(catDir(b.cat), location.href).href, { openAs: 'directory' }) : ePub(buf); book = bk;
+  const failOpen = e => { if (book !== bk) return; if (!stream) logErr('open', e); $('#loading').style.display = 'none';
+    toast(stream ? (navigator.onLine ? 'Не удалось загрузить книгу. Попробуйте ещё раз.' : 'Эта книга ещё не скачана на устройство. Откройте её, когда появится интернет.') : 'Не удалось открыть книгу: файл повреждён или это не EPUB.', 5000); hold = null; book = null; try { bk.destroy(); } catch (e2) {} show('Lib'); };
   // битый файл: epub.js не отклоняет opened, а шлёт openFailed — иначе «Открываю книгу…» висело бы вечно
   // 90 с: большие книги с картинками на старом телефоне открываются долго
   try { await new Promise((ok, no) => { bk.on('openFailed', no); bk.opened.then(ok, no); setTimeout(() => no(new Error('open timeout')), 90000); }); }
@@ -1023,6 +1050,7 @@ async function openBook(b, atCfi) {
   rendition.on('relocated', onRelocated);
   if (rendition.location && rendition.location.start) onRelocated(rendition.location);
   setTimeout(() => { if (book === bk) askTheme(); }, 6000); // после подсказки про меню
+  if (stream) setTimeout(() => saveCat(b.cat), 1500); // сначала первые страницы, потом остальное
   if (holding) setTimeout(() => { if (hold === holding && !holding.err) { hold = null; if (book === bk && rendition && rendition.location) onRelocated(rendition.location); } }, 6000); // страницы считаются долго — не ждём
   // место не нашлось — вернуться по проценту, когда страницы посчитаны; потом снова сохраняем
   const settle = async () => {

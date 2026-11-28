@@ -229,3 +229,31 @@ test('статистика книги: прогресс, слова из кни�
   await expect(page.locator('.rv-card')).toContainText('countenance');
   expect(errors).toEqual([]);
 });
+
+test('книга каталога: открывается по главам, целиком сохраняется фоном и читается без сети', async ({ browser }) => {
+  test.setTimeout(90000);
+  const db = new FakeDB();
+  const context = await browser.newContext({ viewport: SIZES[1], hasTouch: true, isMobile: true, serviceWorkers: 'allow' });
+  await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+  await attach(context, db);
+  await context.addInitScript(seed => { if (localStorage.getItem('__seeded')) return; localStorage.setItem('__seeded', '1'); for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, JSON.stringify(v)); }, SEED);
+  const page = await context.newPage();
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  const got = []; context.on('request', r => got.push(r.url()));
+  await page.goto('/');
+  await page.waitForFunction(() => navigator.serviceWorker.controller, null, { timeout: 15000 }).catch(() => {});
+  await page.reload();
+  await page.locator('#contBox button', { hasText: 'Читать' }).click();
+  await expect(page.locator('#loading')).toBeHidden({ timeout: 30000 });
+  await expect(page.frameLocator('#viewer iframe').first().locator('body')).toContainText(/\w{3,}/);
+  expect(got.some(u => /catalog\/books\/jane-austen_pride-and-prejudice\/.+\.xhtml/.test(u)), 'главы грузятся по одной').toBe(true);
+  expect(got.some(u => /\.epub$/.test(u)), 'целый EPUB не качается').toBe(false);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lr_catsaved') || '{}')['jane-austen_pride-and-prejudice']), { timeout: 60000 }).toBe(true);
+  // без сети: книга открывается из сохранённого
+  await page.locator('#rBack').click({ force: true }).catch(() => {}); await page.evaluate(() => document.querySelector('#rBack').click());
+  await context.setOffline(true);
+  await page.locator('#contBox button', { hasText: 'Читать' }).click();
+  await expect(page.locator('#loading')).toBeHidden({ timeout: 30000 });
+  await expect(page.frameLocator('#viewer iframe').first().locator('body')).toContainText(/\w{3,}/);
+  expect(errors).toEqual([]);
+});

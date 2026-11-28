@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" dir="ltr" prefix="rdf: http://www.w3.org/1999/02/22-rdf-syntax-ns#" unique-identifier="uid" version="3.0" xml:lang="en-US">
+	<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+		<dc:identifier id="uid">https://standardebooks.org/ebooks/edgar-allan-poe/short-fiction</dc:identifier>
+		<dc:date>2020-11-18T00:18:28Z</dc:date>
+		<meta property="dcterms:modified">2020-11-18T00:18:28Z</meta>
+		<dc:rights>The source text and artwork in this ebook are believed to be in the United States public domain; that is, they are believed to be free of copyright restrictions in the United States. They may still be copyrighted in other countries, so users located outside of the United States must check their local laws before using this ebook. The creators of, and contributors to, this ebook dedicate their contributions to the worldwide public domain via the terms in the [CC0 1.0 Universal Public Domain Dedication](https://creativecommons.org/publicdomain/zero/1.0/).</dc:rights>
+		<meta property="rdf:type">http://schema.org/Book</meta>
+		<dc:publisher id="publisher">Standard Ebooks</dc:publisher>
+		<meta property="file-as" refines="#publisher">Standard Ebooks</meta>
+		<link href="https://standardebooks.org/" refines="#publisher" rel="schema:url"/>
+		<meta property="role" refines="#publisher" scheme="marc:relators">bkd</meta>
+		<meta property="role" refines="#publisher" scheme="marc:relators">mdc</meta>
+		<meta property="role" refines="#publisher" scheme="marc:relators">pbl</meta>
+		<dc:contributor id="type-designer">The League of Moveable Type</dc:contributor>
+		<meta property="file-as" refines="#type-designer">League of Moveable Type, The</meta>
+		<link href="https://www.theleagueofmoveabletype.com/" refines="#type-designer" rel="schema:url"/>
+		<meta property="role" refines="#type-designer" scheme="marc:relators">tyd</meta>
+		<meta id="conformance-statement" property="dcterms:conformsTo">EPUB Accessibility 1.1 - WCAG 2.2 Level AA</meta>
+		<meta property="a11y:certifiedBy" refines="#conformance-statement">Standard Ebooks</meta>
+		<meta property="schema:accessMode">textual</meta>
+		<meta property="schema:accessModeSufficient">textual</meta>
+		<meta property="schema:accessibilityFeature">alternativeText</meta>
+		<meta property="schema:accessibilityFeature">displayTransformability</meta>
+		<meta property="schema:accessibilityFeature">readingOrder</meta>
+		<meta property="schema:accessibilityFeature">structuralNavigation</meta>
+		<meta property="schema:accessibilityFeature">tableOfContents</meta>
+		<meta property="schema:accessibilityFeature">unlocked</meta>
+		<meta property="schema:accessibilityHazard">none</meta>
+		<meta property="schema:accessibilitySummary">This publication conforms to WCAG 2.2 Level AA.</meta>
+		<dc:title id="title">Short Fiction</dc:title>
+		<meta property="file-as" refines="#title">Short Fiction</meta>
+		<dc:subject id="subject-1">Short stories</dc:subject>
+		<dc:subject id="subject-2">Fantasy fiction</dc:subject>
+		<dc:subject id="subject-3">Horror tales, American</dc:subject>
+		<dc:subject id="subject-4">American fiction--19th century</dc:subject>
+		<dc:subject id="subject-5">Poe, Edgar Allan, 1809-1849</dc:subject>
+		<dc:subject id="subject-6">Indexes</dc:subject>
+		<meta property="authority" refines="#subject-1">LCSH</meta>
+		<meta property="term" refines="#subject-1">sh85121813</meta>
+		<meta property="authority" refines="#subject-2">LCSH</meta>
+		<meta property="term" refines="#subject-2">sh85047114</meta>
+		<meta property="authority" refines="#subject-3">LCSH</meta>
+		<meta property="term" refines="#subject-3">sh85062085</meta>
+		<meta property="authority" refines="#subject-4">LCSH</meta>
+		<meta property="term" refines="#subject-4">sh85004319</meta>
+		<meta property="authority" refines="#subject-5">LCSH</meta>
+		<meta property="term" refines="#subject-5">n79029745</meta>
+		<meta property="authority" refines="#subject-6">LCSH</meta>
+		<meta property="term" refines="#subject-6">sh85064865</meta>
+		<meta property="schema:genre">Adventure</meta>
+		<meta property="schema:genre">Comedy</meta>
+		<meta property="schema:genre">Horror</meta>
+		<meta property="schema:genre">Mystery</meta>
+		<meta property="schema:genre">Satire</meta>
+		<meta property="schema:genre">Science Fiction</meta>
+		<meta property="schema:genre">Shorts</meta>
+		<meta property="schema:additionalType">http://schema.org/Collection</meta>
+		<meta id="collection-1" property="belongs-to-collection">Encyclopædia Britannica’s Gateway to the Great Books</meta>
+		<meta property="collection-type" refines="#collection-1">set</meta>
+		<meta id="collection-1-entry-1" property="schema:hasPart" refines="#collection-1">schema:hasPart</meta>
+		<meta property="rdf:type" refines="#collection-1-entry-1">http://schema.org/CreativeWork</meta>
+		<meta property="schema:name" refines="#collection-1-entry-1">The Telltale Heart</meta>
+		<meta id="collection-2" property="belongs-to-collection">Encyclopædia Britannica’s Gateway to the Great Books</meta>
+		<meta property="collection-type" refines="#collection-2">set</meta>
+		<meta id="collection-2-entry-1" property="schema:hasPart" refines="#collection-2">schema:hasPart</meta>
+		<meta property="rdf:type" refines="#collection-2-entry-1">http://schema.org/CreativeWork</meta>
+		<meta property="schema:name" refines="#collection-2-entry-1">The Masque of the Red Death</meta>
+		<meta id="collection-3" property="belongs-to-collection">Harvard Classics Shelf of Fiction</meta>
+		<meta property="collection-type" refines="#collection-3">set</meta>
+		<meta id="collection-3-entry-1" property="schema:hasPart" refines="#collection-3">schema:hasPart</meta>
+		<meta property="rdf:type" refines="#collection-3-entry-1">http://schema.org/CreativeWork</meta>
+		<meta property="schema:name" refines="#collection-3-entry-1">Eleonora</meta>
+		<meta id="collection-4" property="belongs-to-collection">Harvard Classics Shelf of Fiction</meta>
+		<meta property="collection-type" refines="#collection-4">set</meta>
+		<meta id="collection-4-entry-1" property="schema:hasPart" refines="#collection-4">schema:hasPart</meta>
+		<meta property="rdf:type" refines="#collection-4-entry-1">http://schema.org/CreativeWork</meta>
+		<meta property="schema:name" refines="#collection-4-entry-1">The Fall of the House of Usher</meta>
+		<meta id="collection-5" property="belongs-to-collection">Harvard Classics Shelf of Fiction</meta>
+		<meta property="collection-type" refines="#collection-5">set</meta>
+		<meta id="collection-5-entry-1" property="schema:hasPart" refines="#collection-5">schema:hasPart</meta>
+		<meta property="rdf:type" refines="#collection-5-entry-1">http://schema.org/CreativeWork</meta>
+		<meta property="schema:name" refines="#collection-5-entry-1">The Purloined Letter</meta>
+		<meta id="collection-6" property="belongs-to-collection">Haycraft-Queen Cornerstones</meta>
+		<meta property="collection-type" refines="#collection-6">set</meta>
+		<meta id="collection-7" property="belongs-to-collection">The Crime Writers’ Association Top 100 Crime Novels of All Time</meta>
+		<meta property="collection-type" refines="#collection-7">set</meta>
+		<meta property="group-position" refines="#collection-7">23</meta>
+		<meta id="collection-7-entry-1" property="schema:hasPart" refines="#collection-7">schema:hasPart</meta>
+		<meta property="rdf:type" refines="#collection-7-entry-1">http://schema.org/CreativeWork</meta>
+		<meta property="schema:name" refines="#collection-7-entry-1">Tales of Mystery &amp; Imagination</meta>
+		<meta id="collection-8" property="belongs-to-collection">Mystery Writers of America Top 100 Mysteries of All Time</meta>
+		<meta property="collection-type" refines="#collection-8">set</meta>
+		<meta property="group-position" refines="#collection-8">32</meta>
+		<meta id="collection-8-entry-1" property="schema:hasPart" refines="#collection-8">schema:hasPart</meta>
+		<meta property="rdf:type" refines="#collection-8-entry-1">http://schema.org/CreativeWork</meta>
+		<meta property="schema:name" refines="#collection-8-entry-1">Tales of Mystery &amp; Imagination</meta>
+		<meta property="schema:abstract">A collection of Edgar Allan Poe’s short fiction, ordered by date of publication.</meta>
+		<dc:description>
+			&lt;p&gt;&lt;a href="https://standardebooks.org/ebooks/edgar-allan-poe"&gt;Edgar Allan Poe&lt;/a&gt; is one of the primary figures of American nineteenth-century literature. His writing was heavily influenced by Romanticism ideals of emotion and feeling, and although mostly known for his Gothic-tinged horror, his tales jump between many different genres, including science-fiction, satire, humor, mystery, and even early detective fiction.&lt;/p&gt;
+			&lt;p&gt;Poe mostly wrote short stories and &lt;a href="https://standardebooks.org/ebooks/edgar-allan-poe/poetry"&gt;poems&lt;/a&gt;, published in magazines and periodicals like the &lt;i&gt;Southern Literary Messenger&lt;/i&gt; and &lt;i&gt;Graham’s Magazine&lt;/i&gt;, although he also turned his hand to essays and novels (including &lt;a href="https://standardebooks.org/ebooks/edgar-allan-poe/the-narrative-of-arthur-gordon-pym-of-nantucket"&gt;&lt;i&gt;The Narrative of Arthur Gordon Pym of Nantucket&lt;/i&gt;&lt;/a&gt;). He was one of the first American writers to pursue writing as a career, but was better received in France than in his native country. He struggled to make ends meet and resorted to work as a literary critic. His reputation suffered a further blow after his unfortunately early death in 1849 at the age of 40, when a rival not only wrote an extremely unflattering obituary, but bought the rights to his work and published a compilation with a hit piece for an introduction. This undeserved reputation took many decades to fade, but didn’t hinder praise from other notable authors including &lt;a href="https://standardebooks.org/ebooks/arthur-conan-doyle"&gt;Arthur Conan Doyle&lt;/a&gt; and &lt;a href="https://standardebooks.org/ebooks/h-p-lovecraft"&gt;H. P. Lovecraft&lt;/a&gt;.&lt;/p&gt;
+			&lt;p&gt;Collected here are all of Poe’s short fiction stories, in order of their original magazine publication. Notable stories include “The Gold-Bug,” “The Black Cat,” “The Fall of the House of Usher,” “The Masque of the Red Death,” “The Pit and the Pendulum,” “The Murders in the Rue Morgue,” and many more.&lt;/p&gt;
+		</dc:description>
+		<dc:language>en-US</dc:language>
+		<dc:source>https://www.gutenberg.org/ebooks/25525</dc:source>
+		<dc:source>https://archive.org/details/worksofedgaralla01poeeuoft</dc:source>
+		<dc:source>https://archive.org/details/worksofedgaralla02poeeuoft</dc:source>
+		<dc:source>https://archive.org/details/worksofedgaralla03poeeuoft</dc:source>
+		<dc:source>https://archive.org/details/worksofedgaralla04poeeuoft</dc:source>
+		<meta property="schema:wordCount">318069</meta>
+		<meta property="schema:educationalLevel">57.3</meta>
+		<link href="https://en.wikipedia.org/wiki/Edgar_Allan_Poe_bibliography#Tales" rel="schema:sameAs"/>
+		<meta id="vcs-repository" property="schema:workExample">schema:workExample</meta>
+		<meta property="rdf:type" refines="#vcs-repository">http://schema.org/SoftwareSourceCode</meta>
+		<link href="https://github.com/standardebooks/edgar-allan-poe_short-fiction" refines="#vcs-repository" rel="schema:codeRepository"/>
+		<dc:creator id="author">Edgar Allan Poe</dc:creator>
+		<meta property="file-as" refines="#author">Poe, Edgar Allan</meta>
+		<link href="https://en.wikipedia.org/wiki/Edgar_Allan_Poe" refines="#author" rel="schema:sameAs"/>
+		<link href="https://id.loc.gov/authorities/names/n79029745.html" refines="#author" rel="schema:sameAs"/>
+		<meta property="role" refines="#author" scheme="marc:relators">ann</meta>
+		<meta property="role" refines="#author" scheme="marc:relators">aut</meta>
+		<meta property="role" refines="#author" scheme="marc:relators">wfw</meta>
+		<dc:contributor id="artist">Robert Delaunay</dc:contributor>
+		<meta property="file-as" refines="#artist">Delaunay, Robert</meta>
+		<link href="https://en.wikipedia.org/wiki/Robert_Delaunay" refines="#artist" rel="schema:sameAs"/>
+		<link href="https://id.loc.gov/authorities/names/n50039043.html" refines="#artist" rel="schema:sameAs"/>
+		<meta property="role" refines="#artist" scheme="marc:relators">art</meta>
+		<dc:contributor id="introduction-1">William Heath Robinson</dc:contributor>
+		<meta property="file-as" refines="#introduction-1">Robinson, William Heath</meta>
+		<link href="https://en.wikipedia.org/wiki/W._Heath_Robinson" refines="#introduction-1" rel="schema:sameAs"/>
+		<link href="https://id.loc.gov/authorities/names/n50049072.html" refines="#introduction-1" rel="schema:sameAs"/>
+		<meta property="role" refines="#introduction-1" scheme="marc:relators">wfw</meta>
+		<dc:contributor id="introduction-2">James Russell Lowell</dc:contributor>
+		<meta property="file-as" refines="#introduction-2">Lowell, James Russell</meta>
+		<link href="https://en.wikipedia.org/wiki/James_Russell_Lowell" refines="#introduction-2" rel="schema:sameAs"/>
+		<link href="https://id.loc.gov/authorities/names/n79076224.html" refines="#introduction-2" rel="schema:sameAs"/>
+		<meta property="role" refines="#introduction-2" scheme="marc:relators">win</meta>
+		<dc:contributor id="introduction-3">Nathaniel Parker Willis</dc:contributor>
+		<meta property="file-as" refines="#introduction-3">Willis, Nathaniel Parker</meta>
+		<link href="https://en.wikipedia.org/wiki/Nathaniel_Parker_Willis" refines="#introduction-3" rel="schema:sameAs"/>
+		<link href="https://id.loc.gov/authorities/names/n82113974.html" refines="#introduction-3" rel="schema:sameAs"/>
+		<meta property="role" refines="#introduction-3" scheme="marc:relators">win</meta>
+		<dc:contributor id="transcriber-1">David Widger</dc:contributor>
+		<meta property="file-as" refines="#transcriber-1">Widger, David</meta>
+		<link href="https://id.loc.gov/authorities/names/no2011017869.html" refines="#transcriber-1" rel="schema:sameAs"/>
+		<link href="https://www.gutenberg.net.au/widger/home.html" refines="#transcriber-1" rel="schema:url"/>
+		<meta property="role" refines="#transcriber-1" scheme="marc:relators">trc</meta>
+		<dc:contributor id="producer-1">Robin Whittleton</dc:contributor>
+		<meta property="file-as" refines="#producer-1">Whittleton, Robin</meta>
+		<link href="https://www.robinwhittleton.com/" refines="#producer-1" rel="schema:url"/>
+		<meta property="role" refines="#producer-1" scheme="marc:relators">bkp</meta>
+		<meta property="role" refines="#producer-1" scheme="marc:relators">blw</meta>
+		<meta property="role" refines="#producer-1" scheme="marc:relators">cov</meta>
+		<meta property="role" refines="#producer-1" scheme="marc:relators">mrk</meta>
+		<meta property="role" refines="#producer-1" scheme="marc:relators">pfr</meta>
+		<meta property="role" refines="#producer-1" scheme="marc:relators">tyg</meta>
+		<dc:contributor id="producer-2">David Grigg</dc:contributor>
+		<meta property="file-as" refines="#producer-2">Grigg, David</meta>
+		<link href="https://thegriggs.org/david/" refines="#producer-2" rel="schema:url"/>
+		<meta property="role" refines="#producer-2" scheme="marc:relators">pfr</meta>
+	</metadata>
+	<manifest>
+		<item href="css/core.css" id="core.css" media-type="text/css"/>
+		<item href="css/local.css" id="local.css" media-type="text/css"/>
+		<item href="css/se.css" id="se.css" media-type="text/css"/>
+		<item href="images/cover.svg" id="cover.svg" media-type="image/svg+xml" properties="cover-image"/>
+		<item href="images/logo.svg" id="logo.svg" media-type="image/svg+xml"/>
+		<item href="images/titlepage.svg" id="titlepage.svg" media-type="image/svg+xml"/>
+		<item href="text/a-descent-into-the-maelstrom.xhtml" id="a-descent-into-the-maelstrom.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/a-predicament.xhtml" id="a-predicament.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/a-tale-of-jerusalem.xhtml" id="a-tale-of-jerusalem.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/a-tale-of-the-ragged-mountains.xhtml" id="a-tale-of-the-ragged-mountains.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/berenice.xhtml" id="berenice.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/bon-bon.xhtml" id="bon-bon.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/colophon.xhtml" id="colophon.xhtml" media-type="application/xhtml+xml" properties="svg"/>
+		<item href="text/diddling.xhtml" id="diddling.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/edgar-allan-poe.xhtml" id="edgar-allan-poe.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/eleonora.xhtml" id="eleonora.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/endnotes.xhtml" id="endnotes.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/four-beasts-in-one.xhtml" id="four-beasts-in-one.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/halftitlepage.xhtml" id="halftitlepage.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/hop-frog.xhtml" id="hop-frog.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/how-to-write-a-blackwood-article.xhtml" id="how-to-write-a-blackwood-article.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/imprint.xhtml" id="imprint.xhtml" media-type="application/xhtml+xml" properties="svg"/>
+		<item href="text/king-pest.xhtml" id="king-pest.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/landors-cottage.xhtml" id="landors-cottage.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/ligeia.xhtml" id="ligeia.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/lionizing.xhtml" id="lionizing.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/loss-of-breath.xhtml" id="loss-of-breath.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/mellonta-tauta.xhtml" id="mellonta-tauta.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/mesmeric-revelation.xhtml" id="mesmeric-revelation.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/metzengerstein.xhtml" id="metzengerstein.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/morella.xhtml" id="morella.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/ms-found-in-a-bottle.xhtml" id="ms-found-in-a-bottle.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/mystification.xhtml" id="mystification.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/never-bet-the-devil-your-head.xhtml" id="never-bet-the-devil-your-head.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/shadow.xhtml" id="shadow.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/silence.xhtml" id="silence.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/some-words-with-a-mummy.xhtml" id="some-words-with-a-mummy.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-angel-of-the-odd.xhtml" id="the-angel-of-the-odd.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-assignation.xhtml" id="the-assignation.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-black-cat.xhtml" id="the-black-cat.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-business-man.xhtml" id="the-business-man.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-cask-of-amontillado.xhtml" id="the-cask-of-amontillado.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-colloquy-of-monos-and-una.xhtml" id="the-colloquy-of-monos-and-una.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-conversation-of-eiros-and-charmion.xhtml" id="the-conversation-of-eiros-and-charmion.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-death-of-edgar-allan-poe.xhtml" id="the-death-of-edgar-allan-poe.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-devil-in-the-belfry.xhtml" id="the-devil-in-the-belfry.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-domain-of-arnheim.xhtml" id="the-domain-of-arnheim.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-duc-de-lomelette.xhtml" id="the-duc-de-lomelette.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-facts-in-the-case-of-m-valdemar.xhtml" id="the-facts-in-the-case-of-m-valdemar.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-fall-of-the-house-of-usher.xhtml" id="the-fall-of-the-house-of-usher.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-gold-bug.xhtml" id="the-gold-bug.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-imp-of-the-perverse.xhtml" id="the-imp-of-the-perverse.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-island-of-the-fay.xhtml" id="the-island-of-the-fay.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-landscape-garden.xhtml" id="the-landscape-garden.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-life-of-edgar-allan-poe.xhtml" id="the-life-of-edgar-allan-poe.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-literary-life-of-thingum-bob-esq.xhtml" id="the-literary-life-of-thingum-bob-esq.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-man-of-the-crowd.xhtml" id="the-man-of-the-crowd.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-man-that-was-used-up.xhtml" id="the-man-that-was-used-up.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-masque-of-the-red-death.xhtml" id="the-masque-of-the-red-death.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-murders-in-the-rue-morgue.xhtml" id="the-murders-in-the-rue-morgue.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-mystery-of-marie-roget.xhtml" id="the-mystery-of-marie-roget.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-oblong-box.xhtml" id="the-oblong-box.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-oval-portrait.xhtml" id="the-oval-portrait.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-pit-and-the-pendulum.xhtml" id="the-pit-and-the-pendulum.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-power-of-words.xhtml" id="the-power-of-words.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-premature-burial.xhtml" id="the-premature-burial.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-purloined-letter.xhtml" id="the-purloined-letter.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-spectacles.xhtml" id="the-spectacles.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-sphinx.xhtml" id="the-sphinx.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-system-of-doctor-tarr-and-professor-fether.xhtml" id="the-system-of-doctor-tarr-and-professor-fether.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-telltale-heart.xhtml" id="the-telltale-heart.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-thousand-and-second-tale-of-scheherazade.xhtml" id="the-thousand-and-second-tale-of-scheherazade.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/the-unparalleled-adventure-of-one-hans-pfaall.xhtml" id="the-unparalleled-adventure-of-one-hans-pfaall.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/thou-art-the-man.xhtml" id="thou-art-the-man.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/three-sundays-in-a-week.xhtml" id="three-sundays-in-a-week.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/titlepage.xhtml" id="titlepage.xhtml" media-type="application/xhtml+xml" properties="svg"/>
+		<item href="text/uncopyright.xhtml" id="uncopyright.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/von-kempelen-and-his-discovery.xhtml" id="von-kempelen-and-his-discovery.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/why-the-little-frenchman-wears-his-hand-in-a-sling.xhtml" id="why-the-little-frenchman-wears-his-hand-in-a-sling.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/william-wilson.xhtml" id="william-wilson.xhtml" media-type="application/xhtml+xml"/>
+		<item href="text/x-ing-a-paragrab.xhtml" id="x-ing-a-paragrab.xhtml" media-type="application/xhtml+xml"/>
+		<item href="toc.xhtml" id="toc.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+	</manifest>
+	<spine>
+		<itemref idref="titlepage.xhtml"/>
+		<itemref idref="imprint.xhtml"/>
+		<itemref idref="edgar-allan-poe.xhtml"/>
+		<itemref idref="the-life-of-edgar-allan-poe.xhtml"/>
+		<itemref idref="the-death-of-edgar-allan-poe.xhtml"/>
+		<itemref idref="halftitlepage.xhtml"/>
+		<itemref idref="metzengerstein.xhtml"/>
+		<itemref idref="the-duc-de-lomelette.xhtml"/>
+		<itemref idref="a-tale-of-jerusalem.xhtml"/>
+		<itemref idref="loss-of-breath.xhtml"/>
+		<itemref idref="bon-bon.xhtml"/>
+		<itemref idref="ms-found-in-a-bottle.xhtml"/>
+		<itemref idref="the-assignation.xhtml"/>
+		<itemref idref="berenice.xhtml"/>
+		<itemref idref="morella.xhtml"/>
+		<itemref idref="lionizing.xhtml"/>
+		<itemref idref="the-unparalleled-adventure-of-one-hans-pfaall.xhtml"/>
+		<itemref idref="king-pest.xhtml"/>
+		<itemref idref="shadow.xhtml"/>
+		<itemref idref="four-beasts-in-one.xhtml"/>
+		<itemref idref="mystification.xhtml"/>
+		<itemref idref="silence.xhtml"/>
+		<itemref idref="ligeia.xhtml"/>
+		<itemref idref="how-to-write-a-blackwood-article.xhtml"/>
+		<itemref idref="a-predicament.xhtml"/>
+		<itemref idref="the-devil-in-the-belfry.xhtml"/>
+		<itemref idref="the-man-that-was-used-up.xhtml"/>
+		<itemref idref="the-fall-of-the-house-of-usher.xhtml"/>
+		<itemref idref="william-wilson.xhtml"/>
+		<itemref idref="the-conversation-of-eiros-and-charmion.xhtml"/>
+		<itemref idref="why-the-little-frenchman-wears-his-hand-in-a-sling.xhtml"/>
+		<itemref idref="the-business-man.xhtml"/>
+		<itemref idref="the-man-of-the-crowd.xhtml"/>
+		<itemref idref="the-murders-in-the-rue-morgue.xhtml"/>
+		<itemref idref="a-descent-into-the-maelstrom.xhtml"/>
+		<itemref idref="the-island-of-the-fay.xhtml"/>
+		<itemref idref="the-colloquy-of-monos-and-una.xhtml"/>
+		<itemref idref="never-bet-the-devil-your-head.xhtml"/>
+		<itemref idref="eleonora.xhtml"/>
+		<itemref idref="three-sundays-in-a-week.xhtml"/>
+		<itemref idref="the-oval-portrait.xhtml"/>
+		<itemref idref="the-masque-of-the-red-death.xhtml"/>
+		<itemref idref="the-landscape-garden.xhtml"/>
+		<itemref idref="the-mystery-of-marie-roget.xhtml"/>
+		<itemref idref="the-pit-and-the-pendulum.xhtml"/>
+		<itemref idref="the-telltale-heart.xhtml"/>
+		<itemref idref="the-gold-bug.xhtml"/>
+		<itemref idref="the-black-cat.xhtml"/>
+		<itemref idref="diddling.xhtml"/>
+		<itemref idref="the-spectacles.xhtml"/>
+		<itemref idref="a-tale-of-the-ragged-mountains.xhtml"/>
+		<itemref idref="the-premature-burial.xhtml"/>
+		<itemref idref="mesmeric-revelation.xhtml"/>
+		<itemref idref="the-oblong-box.xhtml"/>
+		<itemref idref="the-angel-of-the-odd.xhtml"/>
+		<itemref idref="thou-art-the-man.xhtml"/>
+		<itemref idref="the-literary-life-of-thingum-bob-esq.xhtml"/>
+		<itemref idref="the-purloined-letter.xhtml"/>
+		<itemref idref="the-thousand-and-second-tale-of-scheherazade.xhtml"/>
+		<itemref idref="some-words-with-a-mummy.xhtml"/>
+		<itemref idref="the-power-of-words.xhtml"/>
+		<itemref idref="the-imp-of-the-perverse.xhtml"/>
+		<itemref idref="the-system-of-doctor-tarr-and-professor-fether.xhtml"/>
+		<itemref idref="the-facts-in-the-case-of-m-valdemar.xhtml"/>
+		<itemref idref="the-sphinx.xhtml"/>
+		<itemref idref="the-cask-of-amontillado.xhtml"/>
+		<itemref idref="the-domain-of-arnheim.xhtml"/>
+		<itemref idref="mellonta-tauta.xhtml"/>
+		<itemref idref="hop-frog.xhtml"/>
+		<itemref idref="von-kempelen-and-his-discovery.xhtml"/>
+		<itemref idref="x-ing-a-paragrab.xhtml"/>
+		<itemref idref="landors-cottage.xhtml"/>
+		<itemref idref="endnotes.xhtml"/>
+		<itemref idref="colophon.xhtml"/>
+		<itemref idref="uncopyright.xhtml"/>
+	</spine>
+</package>
