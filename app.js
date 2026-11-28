@@ -82,29 +82,50 @@ const KARR = { book: () => books, word: () => words, note: () => notes, mark: ()
 function diffAll() {
   for (const k of Object.keys(KARR)) {
     const seen = new Set();
-    for (const o of KARR[k]()) { if (!o || !o.id) continue; seen.add(o.id); const j = JSON.stringify(o); if (snap[k][o.id] !== j) { snap[k][o.id] = j; queue[k + '|' + o.id] = { kind: k, id: o.id, data: o }; } }
-    for (const id of Object.keys(snap[k])) if (!seen.has(id)) { delete snap[k][id]; queue[k + '|' + id] = { kind: k, id, data: null }; }
+    for (const o of KARR[k]()) { if (!o || !o.id) continue; seen.add(o.id); const j = JSON.stringify(o); if (snap[k][o.id] !== j) { snap[k][o.id] = j; queue[k + '|' + o.id] = { kind: k, id: o.id, data: o, at: Date.now() }; } }
+    for (const id of Object.keys(snap[k])) if (!seen.has(id)) { delete snap[k][id]; queue[k + '|' + id] = { kind: k, id, data: null, at: Date.now() }; }
   }
-  const js = JSON.stringify(S); if (snap.set.S !== js) { snap.set.S = js; queue['set|S'] = { kind: 'set', id: 'S', data: S }; }
+  const js = JSON.stringify(S); if (snap.set.S !== js) { snap.set.S = js; queue['set|S'] = { kind: 'set', id: 'S', data: S, at: Date.now() }; }
 }
 function schedule() { if (!CLOUD || !user) return; diffAll(); LS.set('lr_snap', snap); LS.set('lr_queue', queue); clearTimeout(syncT); syncT = setTimeout(flush, 1200); }
 async function flush() {
   if (!CLOUD || !user || syncing) return;
   const items = Object.entries(queue); if (!items.length) return;
-  syncing = true;
+  syncing = true; let bad = false;
   try {
     const now = new Date().toISOString();
-    const rows = items.map(([, it]) => ({ kind: it.kind, id: it.id, data: it.data ? JSON.parse(JSON.stringify(it.data)) : {}, deleted: !it.data, updated_at: now }));
-    for (let i = 0; i < rows.length; i += 200) { const r = await sb.from('items').upsert(rows.slice(i, i + 200), { onConflict: 'user_id,kind,id' }); if (r.error) throw r.error; }
-    for (const [k, it] of items) if (queue[k] === it) delete queue[k];
+    // каждый вид отдельно: если сервер не примет один (например, база ещё не знает новый вид), остальные всё равно уйдут
+    const kinds = {}; for (const e of items) (kinds[e[1].kind] = kinds[e[1].kind] || []).push(e);
+    for (const list of Object.values(kinds)) {
+      for (let i = 0; i < list.length; i += 200) {
+        const part = list.slice(i, i + 200);
+        const rows = part.map(([, it]) => ({ kind: it.kind, id: it.id, data: it.data ? JSON.parse(JSON.stringify(it.data)) : {}, deleted: !it.data, updated_at: now }));
+        const r = await sb.from('items').upsert(rows, { onConflict: 'user_id,kind,id' });
+        if (r.error) { console.warn('sync failed', part[0][1].kind, r.error); bad = true; break; }
+        for (const [k, it] of part) if (queue[k] === it) delete queue[k];
+      }
+    }
     LS.set('lr_queue', queue);
-  } catch (e) { console.warn('sync failed', e); clearTimeout(syncT); syncT = setTimeout(flush, 15000); }
+  } catch (e) { console.warn('sync failed', e); bad = true; }
   finally { syncing = false; }
+  if (bad) { clearTimeout(syncT); syncT = setTimeout(flush, 15000); }
 }
 async function pull() {
-  await flush();
   const all = [];
-  for (let from = 0; ; from += 1000) { const r = await sb.from('items').select('kind,id,data,deleted').order('kind').order('id').range(from, from + 999); if (r.error) throw r.error; all.push(...r.data); if (r.data.length < 1000) break; }
+  for (let from = 0; ; from += 1000) { const r = await sb.from('items').select('kind,id,data,deleted,updated_at').order('kind').order('id').range(from, from + 999); if (r.error) throw r.error; all.push(...r.data); if (r.data.length < 1000) break; }
+  // неотправленное с устройства против сервера: остаётся то, что новее. Иначе давно не открывавшийся телефон
+  // затёр бы своим старым состоянием свежее с другого устройства
+  const srv = new Map(all.map(r => [r.kind + '|' + r.id, r]));
+  const stamp = (k, d) => !d ? 0 : k === 'book' ? (d.lastRead || d.added || 0) : Math.max(d.seen || 0, d.t || 0);
+  let dropped = false;
+  for (const [key, it] of Object.entries(queue)) {
+    const r = srv.get(key); if (!r || it.kind === 'day') continue;
+    const st = Date.parse(r.updated_at) || 0;
+    const older = it.at ? st > it.at // время постановки в очередь известно
+      : !!it.data && (it.kind === 'book' || it.kind === 'word') && (r.deleted ? st : stamp(it.kind, r.data)) > stamp(it.kind, it.data); // старые записи без времени
+    if (older) { delete queue[key]; dropped = true; }
+  }
+  if (dropped) LS.set('lr_queue', queue);
   const by = { book: [], word: [], note: [], mark: [], day: [] }; let set = null;
   for (const row of all) { if (row.deleted) continue; if (row.kind === 'set') set = row.data; else if (by[row.kind]) by[row.kind].push(row.data); }
   for (const it of Object.values(queue)) { if (it.kind === 'set') continue; const arr = by[it.kind]; const i = arr.findIndex(x => x.id === it.id); if (it.data) { if (i >= 0) arr[i] = it.data; else arr.push(it.data); } else if (i >= 0) arr.splice(i, 1); }
@@ -126,6 +147,7 @@ async function pull() {
   snap.set.S = JSON.stringify(S);
   LS.set('lr_snap', snap);
   if (Object.keys(ahead).length) schedule();
+  if (Object.keys(queue).length) flush();
 }
 const bookPath = b => user.id + '/' + b.id + '.epub';
 async function uploadBook(b, buf) {

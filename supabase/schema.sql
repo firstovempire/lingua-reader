@@ -7,13 +7,16 @@
 -- ---------- Данные пользователя (книги, слова, заметки, закладки, настройки) ----------
 create table if not exists public.items (
   user_id    uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  kind       text not null check (kind in ('book','word','note','mark','set')),
+  kind       text not null check (kind in ('book','word','note','mark','set','day')),
   id         text not null,
   data       jsonb not null default '{}'::jsonb,
   deleted    boolean not null default false,
   updated_at timestamptz not null default now(),
   primary key (user_id, kind, id)
 );
+-- вид 'day' (статистика по дням) появился позже: обновляем проверку и в уже созданной таблице
+alter table public.items drop constraint if exists items_kind_check;
+alter table public.items add constraint items_kind_check check (kind in ('book','word','note','mark','set','day'));
 alter table public.items enable row level security;
 grant select, insert, update, delete on public.items to authenticated;
 revoke all on public.items from anon;
