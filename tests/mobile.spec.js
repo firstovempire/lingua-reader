@@ -230,30 +230,47 @@ test('статистика книги: прогресс, слова из кни�
   expect(errors).toEqual([]);
 });
 
-test('книга каталога: открывается по главам, целиком сохраняется фоном и читается без сети', async ({ browser }) => {
-  test.setTimeout(90000);
+test('книга каталога: открывается по главам, со стилями и картинками, целиком сохраняется фоном и читается без сети', async ({ browser }) => {
+  test.setTimeout(120000);
+  const id = 'lewis-carroll_alices-adventures-in-wonderland_john-tenniel';
+  const seed = Object.assign({}, SEED, { lr_tried: true, lr_books: [{ id: 'cat-' + id, cat: id, title: 'Alice', author: 'Lewis Carroll', added: T0, pct: 0, lastRead: T0 + 1, up: true }] });
   const db = new FakeDB();
   const context = await browser.newContext({ viewport: SIZES[1], hasTouch: true, isMobile: true, serviceWorkers: 'allow' });
   await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
   await attach(context, db);
-  await context.addInitScript(seed => { if (localStorage.getItem('__seeded')) return; localStorage.setItem('__seeded', '1'); for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, JSON.stringify(v)); }, SEED);
+  await context.addInitScript(seed => { if (localStorage.getItem('__seeded')) return; localStorage.setItem('__seeded', '1'); for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, JSON.stringify(v)); }, seed);
   const page = await context.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   const got = []; context.on('request', r => got.push(r.url()));
   await page.goto('/');
   await page.waitForFunction(() => navigator.serviceWorker.controller, null, { timeout: 15000 }).catch(() => {});
   await page.reload();
+  // стили книги применились и картинки загрузились (иначе иллюстрированные книги пустые)
+  const looks = async () => {
+    await page.evaluate(() => window.__lr.rendition.display('text/chapter-1.xhtml'));
+    return page.frameLocator('#viewer iframe').first().locator('body').evaluate(async body => {
+      const d = body.ownerDocument; const imgs = [...d.images];
+      await Promise.all(imgs.map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
+      const rules = [...d.styleSheets].reduce((n, sh) => { try { return n + sh.cssRules.length; } catch (e) { return n; } }, 0);
+      return { rules, imgs: imgs.length, okImgs: imgs.filter(i => i.naturalWidth > 0).length };
+    });
+  };
   await page.locator('#contBox button', { hasText: 'Читать' }).click();
   await expect(page.locator('#loading')).toBeHidden({ timeout: 30000 });
-  await expect(page.frameLocator('#viewer iframe').first().locator('body')).toContainText(/\w{3,}/);
-  expect(got.some(u => /catalog\/books\/jane-austen_pride-and-prejudice\/.+\.xhtml/.test(u)), 'главы грузятся по одной').toBe(true);
+  let L = await looks();
+  expect(L.rules, 'стили книги загрузились').toBeGreaterThan(5);
+  expect(L.imgs, 'в первой главе есть картинка').toBeGreaterThan(0);
+  expect(L.okImgs, 'картинки видны').toBe(L.imgs);
+  expect(got.some(u => /catalog\/books\/.+\/text\/chapter-1\.xhtml/.test(u)), 'главы грузятся по одной').toBe(true);
   expect(got.some(u => /\.epub$/.test(u)), 'целый EPUB не качается').toBe(false);
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lr_catsaved') || '{}')['jane-austen_pride-and-prejudice']), { timeout: 60000 }).toBe(true);
-  // без сети: книга открывается из сохранённого
-  await page.locator('#rBack').click({ force: true }).catch(() => {}); await page.evaluate(() => document.querySelector('#rBack').click());
+  await expect.poll(() => page.evaluate(id => JSON.parse(localStorage.getItem('lr_catsaved') || '{}')[id], id), { timeout: 90000 }).toBe(true);
+  // без сети: книга открывается из сохранённого, со стилями и картинками
+  await page.evaluate(() => document.querySelector('#rBack').click());
   await context.setOffline(true);
   await page.locator('#contBox button', { hasText: 'Читать' }).click();
   await expect(page.locator('#loading')).toBeHidden({ timeout: 30000 });
-  await expect(page.frameLocator('#viewer iframe').first().locator('body')).toContainText(/\w{3,}/);
+  L = await looks();
+  expect(L.rules).toBeGreaterThan(5);
+  expect(L.okImgs).toBe(L.imgs);
   expect(errors).toEqual([]);
 });

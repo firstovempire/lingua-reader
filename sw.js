@@ -11,7 +11,10 @@ self.addEventListener('fetch', e => {
   const isFont = /fonts\.(googleapis|gstatic)\.com$/.test(u.hostname);
   if (u.origin !== location.origin && !isFont) return;          // Supabase, Google и прочее — мимо кэша          // запросы к Gemini и прочему — мимо кэша
   if (/\/catalog\/.+\.epub$/.test(u.pathname)) return;      // книги каталога кладём в IndexedDB, не в кэш
-  if (/\/catalog\/books\//.test(u.pathname)) {                 // главы книг каталога: сначала сохранённое, иначе сеть (и сохранить)
+  if (/\/catalog\/books\//.test(u.pathname)) {
+    // список файлов книги сохраняет сам app.js (по нему видно, что книга сохранена целиком и не устарела) — его не трогаем
+    if (/\/files\.json$/.test(u.pathname)) return;
+    // главы книг каталога: сначала сохранённое, иначе сеть (и сохранить)
     e.respondWith(caches.open('lr-books').then(c => c.match(e.request, { ignoreSearch: true }).then(hit => hit || fetch(e.request).then(r => { if (r.ok) c.put(e.request, r.clone()).catch(() => {}); return r; }))));
     return;
   }

@@ -699,27 +699,40 @@ const BOOKS_CACHE = 'lr-books'; // sw.js его не трогает при об�
 const catDir = id => 'catalog/books/' + id + '/';
 const catSaved = LS.get('lr_catsaved', {}); // id → true: книга сохранена целиком на этом устройстве
 const catSaving = new Map(); // id → доля 0…1, пока идёт фоновая загрузка
+const catFails = new Map(); // id → сколько раз за сеанс не удалось сохранить (файл пропал, сеть рвётся)
 async function saveCat(id) {
-  if (catSaved[id] || catSaving.has(id) || !('caches' in window) || !navigator.onLine) return;
+  if (catSaved[id] || catSaving.has(id) || !('caches' in window) || !navigator.onLine || (catFails.get(id) || 0) >= 3) return;
   catSaving.set(id, 0);
+  let stop = false;
   try {
     // у тех, кто добавил книгу раньше, она уже лежит целиком в IndexedDB — второй раз не качаем
     if (await files.get('cat-' + id).catch(() => null)) { catSaved[id] = true; LS.set('lr_catsaved', catSaved); return; }
     const cache = await caches.open(BOOKS_CACHE), dir = catDir(id);
-    const list = await (await fetch(dir + 'files.json', { cache: 'no-cache' })).json();
-    const urls = [dir + 'files.json', ...list.files.map(f => dir + f.split('/').map(encodeURIComponent).join('/'))];
+    const fresh = await fetch(dir + 'files.json', { cache: 'no-store' }); if (!fresh.ok) throw new Error('files.json ' + fresh.status);
+    const list = await fresh.clone().json();
+    // книгу на сайте обновили (catalog/unpack.js) — старые главы не смешиваем с новыми
+    const old = await cache.match(dir + 'files.json'); if (old) { const o = await old.json().catch(() => ({})); if (o.v !== list.v) await dropCat(id); }
+    const urls = list.files.map(f => dir + f.split('/').map(encodeURIComponent).join('/'));
     let done = 0, i = 0;
-    // по 4 файла сразу; уже сохранённое (например, прочитанные главы) не качаем заново
-    const worker = async () => { while (i < urls.length) { const u = urls[i++]; if (!(await cache.match(u))) await cache.add(u); done++; catSaving.set(id, done / urls.length); if (current === 'Lib' && !(done % 10)) updCatStatus(); } };
-    await Promise.all([worker(), worker(), worker(), worker()]);
+    // по 3 файла сразу; уже сохранённое (например, прочитанные главы) не качаем заново; ошибка останавливает всех
+    const worker = async () => { while (i < urls.length && !stop) { const u = urls[i++]; try { if (!(await cache.match(u))) await cache.add(u); } catch (e) { stop = true; throw e; } done++; catSaving.set(id, done / urls.length); if (current === 'Lib' && !(done % 10)) updCatStatus(); } };
+    await Promise.all([worker(), worker(), worker()]);
+    await cache.put(dir + 'files.json', fresh); // список кладём последним: он означает «книга сохранена целиком»
     catSaved[id] = true; LS.set('lr_catsaved', catSaved);
-  } catch (e) { console.warn('saveCat', id, e); } // нет сети — докачаем при следующем открытии
+  } catch (e) { stop = true; catFails.set(id, (catFails.get(id) || 0) + 1); console.warn('saveCat', id, e); } // докачаем позже, уже сохранённое не пропадёт
   finally { catSaving.delete(id); if (current === 'Lib') updCatStatus(); }
 }
 let savingAll = false;
+let catChecked = false;
 async function saveAllCats() {
   if (savingAll) { updCatStatus(); return; } savingAll = true;
-  try { for (const b of books.slice()) if (b.cat && !catSaved[b.cat]) await saveCat(b.cat); } finally { savingAll = false; }
+  try {
+    // Safari может очистить кэш сам: отметка «сохранено» без файлов — снимаем, чтобы докачать
+    if (!catChecked && 'caches' in window) { catChecked = true; const cache = await caches.open(BOOKS_CACHE); for (const id of Object.keys(catSaved)) if (!(await files.get('cat-' + id).catch(() => null)) && !(await cache.match(catDir(id) + 'files.json'))) { delete catSaved[id]; LS.set('lr_catsaved', catSaved); } }
+    // режим экономии трафика: заранее не качаем, сохраняется только открытая книга
+    const conn = /** @type {any} */ (navigator).connection; if (conn && conn.saveData) return;
+    for (const b of books.slice()) if (b.cat && !catSaved[b.cat]) await saveCat(b.cat);
+  } finally { savingAll = false; }
 }
 async function dropCat(id) {
   delete catSaved[id]; LS.set('lr_catsaved', catSaved);
@@ -1010,9 +1023,14 @@ async function openBook(b, atCfi) {
   if (book !== bk) return;
   // iOS Safari не передаёт касания в iframe без allow-scripts, поэтому скрипты разрешаем,
   // а сами скрипты и обработчики из книги вырезаем до показа (защита от «вредных» EPUB)
-  bk.spine.hooks.content.register(doc => {
+  bk.spine.hooks.content.register((doc, section) => {
     try {
       doc.querySelectorAll('script, iframe, object, embed, base, meta[http-equiv]').forEach(el => el.remove());
+      // книга по главам: стили и картинки грузятся относительно адреса главы — возвращаем свой <base> (только наш сайт)
+      if (stream && section && section.url && new URL(section.url, location.href).origin === location.origin) {
+        const base = doc.createElement('base'); base.setAttribute('href', new URL(section.url, location.href).href);
+        const head = doc.querySelector('head'); if (head) head.insertBefore(base, head.firstChild);
+      }
       doc.querySelectorAll('*').forEach(el => { for (const at of [...el.attributes]) { const n = at.name.toLowerCase(), v = (at.value || '').trim().toLowerCase(); if (n.startsWith('on') || ((n === 'href' || n === 'src' || n.endsWith(':href') || n === 'xlink:href') && v.startsWith('javascript:'))) el.removeAttribute(at.name); } });
     } catch (e) {}
   });
