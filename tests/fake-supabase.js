@@ -39,6 +39,7 @@ async function attach(context, db, { loggedIn = true } = {}) {
       return json(rows.slice(off, off + lim).map(r => JSON.parse(JSON.stringify(r))));
     }
     if (p === '/rest/v1/items' && m === 'POST') {
+      if (db.slowPost) await new Promise(r => setTimeout(r, db.slowPost)); // медленная сеть: отправка идёт долго
       const body = JSON.parse(req.postData() || '[]'); const list = Array.isArray(body) ? body : [body];
       if (db.reject && list.some(r => db.reject(r))) return json({ code: '23514', message: 'new row for relation "items" violates check constraint "items_kind_check"' }, 400);
       for (const r of list) db.put(r.kind, r.id, r.data, r.deleted);

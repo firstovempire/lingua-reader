@@ -6,7 +6,7 @@
 (() => {
 'use strict';
 
-const VER = 39; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 43; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -45,8 +45,24 @@ const LS = {
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const norm = s => String(s || '').replace(/\s+/g, ' ').trim();
 let toastT; function toast(m, ms = 2400) { const t = $('#toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(toastT); toastT = setTimeout(() => t.style.display = 'none', ms); }
+// скачать файл с процентами: книги с картинками весят 5–12 МБ, без цифр кажется, что всё зависло
+async function fetchBuf(url, onPct) {
+  const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status);
+  const total = +(r.headers.get('content-length') || 0);
+  if (!total || !r.body || !onPct) return r.arrayBuffer();
+  const rd = r.body.getReader(), parts = []; let got = 0;
+  for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; onPct(Math.min(99, Math.floor(got * 100 / total))); }
+  const out = new Uint8Array(got); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+  return out.buffer;
+}
 const buzz = (ms = 8) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
 const isDesk = () => matchMedia('(min-width:900px)').matches;
+// читалка (epub.js + JSZip, ~320 КБ) нужна только для книг: грузим после показа библиотеки, а не до него
+let epubP = null;
+const loadEpub = () => /** @type {any} */ (window).ePub ? Promise.resolve() : epubP || (epubP = (async () => {
+  const add = src => new Promise((ok, no) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => { el.remove(); no(new Error('Не удалось загрузить читалку. Проверьте интернет.')); }; document.head.append(el); });
+  try { await add('lib/jszip.min.js'); await add('lib/epub.min.js'); } catch (e) { epubP = null; throw e; }
+})());
 function speak(text) { try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'en-US'; u.rate = 0.9; const v = speechSynthesis.getVoices().find(v => /^en(-|_)US/i.test(v.lang)); if (v) u.voice = v; speechSynthesis.speak(u); } catch (e) {} }
 
 /* ================= облако ================= */
@@ -125,16 +141,17 @@ async function flush() {
         const r = await sb.from('items').upsert(rows, { onConflict: 'user_id,kind,id' }).select('kind,id,updated_at');
         if (r.error) { if (isNetErr(r.error)) throw r.error; bad = true; err = part[0][1].kind + ': ' + r.error.message; logErr('sync ' + part[0][1].kind, r.error); break; }
         for (const x of r.data || []) srvAt[x.kind + '|' + x.id] = x.updated_at;
-        for (const [k, it] of part) if (queue[k] === it) delete queue[k];
+        // запись ушла; если её успели изменить ещё раз во время отправки — новая правка опирается на нашу же версию, это не конфликт
+        for (const [k, it] of part) { if (queue[k] === it) delete queue[k]; else if (queue[k] && srvAt[k]) queue[k].base = srvAt[k]; }
       }
     }
-    LS.set('lr_queue', queue); LS.set('lr_seen', srvAt);
     if (!bad) { sync.okAt = Date.now(); LS.set('lr_syncok', sync.okAt); }
     sync.err = err;
   } catch (e) { bad = true; if (isNetErr(e)) setOffline(true); else { sync.err = String(e.message || e); logErr('sync', e); } }
-  finally { syncing = false; }
+  finally { syncing = false; LS.set('lr_queue', queue); LS.set('lr_seen', srvAt); } // и при обрыве связи: уже отправленное помнится после перезапуска
   updSync();
   if (bad && !sync.offline) { clearTimeout(syncT); syncT = setTimeout(flush, 30000); }
+  else if (!bad && Object.keys(queue).length) { clearTimeout(syncT); syncT = setTimeout(flush, 300); } // правки, сделанные во время отправки
 }
 // Забрать данные с сервера. Обычно — только изменённое с прошлого раза; целиком — раз в сутки и при входе
 async function pull(full) {
@@ -427,6 +444,12 @@ function partialParse(txt) {
 }
 function apiError(status, data) {
   const m = (data && data.error && (data.error.message || JSON.stringify(data.error))) || ('HTTP ' + status);
+  // через сервер: ключ и регион проверяет сервер, сюда доходят только сбои самого сервера и входа
+  if (CLOUD) {
+    if (status === 401) return 'Вход устарел. Обновите страницу; если не поможет — выйдите и войдите снова.';
+    if (status === 429) return 'Слишком много переводов подряд. Подождите минуту и коснитесь слова ещё раз.';
+    if (status >= 500) return 'Сервер перевода временно недоступен. Коснитесь слова ещё раз через минуту.';
+  }
   if (/location is not supported/i.test(m)) return 'Google не принимает запросы из этого региона. Включите VPN (например, Франция) и повторите.';
   if (status === 400 && /API key/i.test(m)) return 'Ключ не принят. Скопируйте его заново целиком.';
   if (status === 401 || status === 403) return 'Ключ не принят (' + status + '). Проверьте, что он скопирован целиком.\n' + m;
@@ -511,6 +534,7 @@ const isFresh = (c, r) => isFull(r) && (r._v === 2 || (isPhrase(c.sel) ? Array.i
 
 /* ================= библиотека ================= */
 async function readMeta(buf, fallback) {
+  await loadEpub();
   const b = ePub(buf.slice(0));
   let title = fallback, author = '', cover = '';
   try { const m = await b.loaded.metadata; title = norm(m.title) || fallback; author = norm(m.creator); } catch (e) {}
@@ -613,17 +637,20 @@ function renderCatalog() {
     h('p', { style: 'margin:-8px 0 -8px;font-size:13px;color:var(--muted)' }, (lv === 'all' ? 'Все уровни' : lv + ' · ' + (LEVELS.find(x => x[0] === lv) || ['', ''])[1].toLowerCase()) + ' · ' + list.length + ' ' + plural(list.length, 'книга', 'книги', 'книг'), S.level && lv === S.level ? h('b', { style: 'color:var(--accent);font-weight:600' }, ' · ваш уровень') : null),
     h('ul', { class: 'cat-list' }, items.length ? items : h('li', { class: 'muted', text: 'Нет книг этого уровня' })));
 }
+const catLoading = new Set(); // книги каталога, которые уже скачиваются: повторное нажатие не добавит вторую копию
 async function addFromCatalog(x, btn) {
-  if (books.some(b => b.cat === x.id)) return;
+  if (books.some(b => b.cat === x.id) || catLoading.has(x.id)) return;
+  catLoading.add(x.id);
   btn.disabled = true; btn.replaceChildren(h('span', { class: 'spin' }), ' Скачиваю…');
   try {
-    const r = await fetch('catalog/' + x.id + '.epub'); if (!r.ok) throw new Error('файл недоступен');
-    const buf = await r.arrayBuffer();
+    const buf = await fetchBuf('catalog/' + x.id + '.epub', p => btn.replaceChildren(h('span', { class: 'spin' }), ' Скачиваю… ' + p + '%'));
     const nb = { id: 'cat-' + x.id, cat: x.id, title: x.title, author: x.author, cover: 'catalog/covers/' + x.id + '.jpg', added: Date.now(), up: true, pct: 0 };
     await files.put(nb.id, buf);
+    if (books.some(b => b.cat === x.id)) { renderCatalog(); return; } // пока качали, книга пришла с другого устройства
     books.unshift(nb); saveBooks(); renderLib(); buzz(10);
     toast('Добавлено: ' + x.title); renderCatalog();
-  } catch (e) { btn.disabled = false; btn.textContent = 'Повторить'; toast('Не удалось скачать: ' + e.message, 4000); }
+  } catch (e) { btn.disabled = false; btn.textContent = 'Повторить'; toast(navigator.onLine ? 'Не удалось скачать книгу. Попробуйте ещё раз.' : 'Нет интернета. Добавьте книгу, когда связь вернётся.', 4000); }
+  finally { catLoading.delete(x.id); }
 }
 $('#catBtn').onclick = openCatalog;
 
@@ -631,6 +658,7 @@ $('#catBtn').onclick = openCatalog;
 function renderWords() {
   const q = norm($('#wSearch').value).toLowerCase();
   $('#wCount').textContent = words.length ? words.length + ' сохранено' : '';
+  $('#wExport').style.display = words.length ? '' : 'none';
   const box = $('#wGroups'); box.innerHTML = '';
   if (!words.length) { box.append(h('div', { class: 'empty' }, h('div', { style: 'font-family:var(--serif);font-size:18px;color:var(--ink);margin-bottom:6px', text: 'Пока пусто' }), 'Коснитесь слова в книге и нажмите ★ — оно появится здесь.')); return; }
   const byBook = new Map();
@@ -640,13 +668,35 @@ function renderWords() {
     box.append(h('section', { class: 'wgroup' },
       h('h2', null, h('span', { 'aria-hidden': 'true', style: `width:18px;height:26px;border-radius:2px 4px 4px 2px;background:${COVER_COLORS[(b.title || '').length % COVER_COLORS.length]}` }), b.title, h('span', { style: 'font-weight:500;color:var(--muted)', text: '· ' + ws.length })),
       h('ul', { class: 'wlist' }, ws.map(w => h('li', null,
-        h('div', { class: 'w' }, h('span', { style: 'font-size:16px' }, h('b', { lang: 'en', text: w.w }), ' — ' + (w.tr || '')), h('span', { class: 'ctx', lang: 'en', text: w.s || '' })),
+        h('div', { class: 'w' }, h('span', { style: 'font-size:16px' }, h('b', { lang: 'en', text: w.w }), ' — ' + (w.tr || '')), h('span', { class: 'ctx', lang: 'en', text: w.s || '' }), h('span', { class: 'wst' + (wordState(w) === 'выучено' ? ' ok' : ''), text: wordState(w) })),
         h('button', { class: 'icobtn', 'aria-label': 'Произнести', onclick: () => speak(w.w) }, ico('speak', 18)),
         b.id ? h('button', { class: 'icobtn', 'aria-label': 'Открыть место в книге', onclick: () => openBook(b, w.cfi) }, ico('chev', 18)) : null,
         h('button', { class: 'icobtn', 'aria-label': 'Удалить слово', style: 'color:var(--muted)', onclick: () => { words = words.filter(x => x.id !== w.id); saveWords(); renderWords(); updBadge(); } }, ico('x', 16)))))));
   }
 }
 $('#wSearch').oninput = renderWords;
+// где слово в повторении: интервалы 1–3–7–21–60 дней, после пятого верного ответа — выучено
+function wordState(w) {
+  const left = (w.due || 0) - Date.now();
+  if (left <= 0) return 'пора повторить';
+  if ((w.box || 0) >= INTERVALS.length) return 'выучено';
+  if (left < DAY) return 'повтор сегодня';
+  const d = Math.round(left / DAY);
+  return 'повтор через ' + d + ' ' + plural(d, 'день', 'дня', 'дней');
+}
+// словарь файлом: таблица через табуляцию — Anki (Файл → Импорт) и Excel/Numbers открывают её как есть
+function exportWords() {
+  const cell = v => String(v || '').replace(/[\t\r\n]+/g, ' ').trim();
+  const rows = words.map(w => [w.w, w.tr, w.tc, w.s, w.st, (books.find(b => b.id === w.bookId) || {}).title, wordState(w)].map(cell).join('\t'));
+  const txt = ['#separator:tab', '#html:false', '#columns:' + ['English', 'Русский', 'Транскрипция', 'Предложение', 'Перевод предложения', 'Книга', 'Повторение'].join('\t'), ...rows, ''].join('\n');
+  const name = 'lingua-slova-' + new Date().toISOString().slice(0, 10) + '.txt';
+  const file = new File(['\ufeff' + txt], name, { type: 'text/plain' });
+  // телефон: системное «Поделиться» (сохранить в Файлы, отправить себе); компьютер — обычная загрузка
+  if (!isDesk() && navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Словарь Lingua Reader' }).catch(() => {}); return; }
+  const a = h('a', { href: URL.createObjectURL(file), download: name }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  toast('Словарь выгружен: ' + words.length + ' ' + plural(words.length, 'слово', 'слова', 'слов'));
+}
+$('#wExport').onclick = exportWords;
 
 /* ================= повторение (карточки) ================= */
 const INTERVALS = [1, 3, 7, 21, 60], SWIPE = 90;
@@ -846,7 +896,9 @@ let hold = null, locReady = false;
 const posLog = LS.get('lr_poslog', []); // как открывались книги, вместе с замерами
 const addPos = x => { posLog.push(x); while (posLog.length > 10) posLog.shift(); LS.set('lr_poslog', posLog); };
 let book = null, rendition = null, curBook = null, navToc = [], spineChars = null, lastLoc = null, progT = null;
+let openSeq = 0; // каждое открытие со своим номером: устаревшее (ушли назад, открыли заново) молча прекращается
 async function openBook(b, atCfi) {
+  const my = ++openSeq, stale = () => my !== openSeq || current !== 'Reader';
   curBook = b; show('Reader');
   $('#loading').style.display = 'flex'; $('#rTitle').textContent = b.title;
   $('#miniCh').textContent = b.title; $('#miniPct').textContent = ''; $('#bCh').textContent = ''; $('#bPct').textContent = '';
@@ -857,16 +909,25 @@ async function openBook(b, atCfi) {
   let buf; try { buf = await files.get(b.id); } catch (e) {}
   if (!buf && b.cat) {
     $('#loading').lastChild.textContent = 'Скачиваю книгу…';
-    try { const r = await fetch('catalog/' + b.cat + '.epub'); if (!r.ok) throw new Error(String(r.status)); buf = await r.arrayBuffer(); await files.put(b.id, buf); } catch (e) { console.warn(e); }
-    $('#loading').lastChild.textContent = 'Открываю книгу…';
+    try { buf = await fetchBuf('catalog/' + b.cat + '.epub', p => { if (my === openSeq) $('#loading').lastChild.textContent = 'Скачиваю книгу… ' + p + '%'; }); await files.put(b.id, buf); } catch (e) { console.warn(e); }
+    if (my === openSeq) $('#loading').lastChild.textContent = 'Открываю книгу…';
   }
   if (!buf && CLOUD && user && !b.cat) {
     $('#loading').lastChild.textContent = 'Скачиваю книгу…';
     try { const r = await sb.storage.from('books').download(bookPath(b)); if (r.error) throw r.error; buf = await r.data.arrayBuffer(); await files.put(b.id, buf); } catch (e) { console.warn(e); }
-    $('#loading').lastChild.textContent = 'Открываю книгу…';
+    if (my === openSeq) $('#loading').lastChild.textContent = 'Открываю книгу…';
   }
-  if (!buf) { $('#loading').style.display = 'none'; toast('Файл книги не найден в этом браузере', 4000); show('Lib'); return; }
+  if (stale()) return;
+  if (!buf) { $('#loading').style.display = 'none'; toast(!navigator.onLine || sync.offline ? 'Эта книга ещё не скачана на устройство. Откройте её, когда появится интернет.' : b.cat || CLOUD ? 'Не удалось скачать книгу. Проверьте интернет и попробуйте ещё раз.' : 'Файла этой книги нет в этом браузере. Добавьте EPUB заново.', 5000); show('Lib'); return; }
+  try { await loadEpub(); } catch (e) { if (stale()) return; $('#loading').style.display = 'none'; toast(e.message, 5000); show('Lib'); return; }
+  if (stale()) return;
   const bk = ePub(buf); book = bk;
+  const failOpen = e => { if (book !== bk) return; logErr('open', e); $('#loading').style.display = 'none'; toast('Не удалось открыть книгу: файл повреждён или это не EPUB.', 5000); hold = null; book = null; try { bk.destroy(); } catch (e2) {} show('Lib'); };
+  // битый файл: epub.js не отклоняет opened, а шлёт openFailed — иначе «Открываю книгу…» висело бы вечно
+  // 90 с: большие книги с картинками на старом телефоне открываются долго
+  try { await new Promise((ok, no) => { bk.on('openFailed', no); bk.opened.then(ok, no); setTimeout(() => no(new Error('open timeout')), 90000); }); }
+  catch (e) { failOpen(e); return; }
+  if (book !== bk) return;
   // iOS Safari не передаёт касания в iframe без allow-scripts, поэтому скрипты разрешаем,
   // а сами скрипты и обработчики из книги вырезаем до показа (защита от «вредных» EPUB)
   bk.spine.hooks.content.register(doc => {
@@ -887,7 +948,8 @@ async function openBook(b, atCfi) {
   applyReader();
   let start = atCfi || b.cfi || undefined;
   if (!start && b.cat) { try { await bk.loaded.spine; const it = bk.spine.spineItems.find(x => !/(titlepage|imprint|halftitle)/i.test(x.href || '')); if (it) start = it.href; } catch (e) {} } // книги каталога: сразу к тексту, без служебных страниц
-  try { await rendition.display(start); } catch (e) { if (holding) holding.err = String(e && e.message || e).slice(0, 80); try { await rendition.display(); } catch (e2) {} }
+  try { await rendition.display(start); } catch (e) { if (holding) holding.err = String(e && e.message || e).slice(0, 80); try { await rendition.display(); } catch (e2) {
+    if (book !== bk) return; try { rendition.destroy(); } catch (e3) {} rendition = null; failOpen(e2); return; } }
   // шрифт и размер меняют раскладку уже после показа, и страница съезжает назад: ждём их и встаём на место ещё раз
   if (start && /^epubcfi/.test(start)) {
     try {
@@ -896,12 +958,15 @@ async function openBook(b, atCfi) {
       if (book === bk) await rendition.display(start);
     } catch (e) {}
   }
+  if (book !== bk || stale()) return;
   $('#loading').style.display = 'none';
-  if (book !== bk) return;
   b.lastRead = Date.now(); saveBooks();
+  // первое чтение: подсказка «коснитесь слова» висит до первого перевода; меню показываем со следующего раза
+  const firstTry = !LS.get('lr_tried', false) && !words.length;
+  if (firstTry) { $('#wordHint').textContent = isDesk() ? 'Нажмите на слово — появится перевод' : 'Коснитесь слова — появится перевод'; setTimeout(() => { if (book === bk && !LS.get('lr_tried', false)) { $('#wordHint').classList.add('on'); $('#wordHint').setAttribute('aria-hidden', 'false'); } }, 900); }
   // подсказка: как открыть меню (первые три раза), панели видны пару секунд
   if (!isDesk()) { const n = LS.get('lr_taphint', 0); toggleChrome(true); setTimeout(() => { if (current === 'Reader') toggleChrome(false); }, 2200);
-    if (n < 3) { LS.set('lr_taphint', n + 1); tapHintT = setTimeout(() => { $('#tapHint').classList.add('on'); tapHintT = setTimeout(() => $('#tapHint').classList.remove('on'), 2600); }, 2400); } }
+    if (n < 3 && !firstTry) { LS.set('lr_taphint', n + 1); tapHintT = setTimeout(() => { $('#tapHint').classList.add('on'); tapHintT = setTimeout(() => $('#tapHint').classList.remove('on'), 2600); }, 2400); } }
   rendition.on('relocated', onRelocated);
   if (rendition.location && rendition.location.start) onRelocated(rendition.location);
   if (holding) setTimeout(() => { if (hold === holding && !holding.err) { hold = null; if (book === bk && rendition && rendition.location) onRelocated(rendition.location); } }, 6000); // страницы считаются долго — не ждём
@@ -1193,6 +1258,7 @@ ${isPhrase(c.sel) ? `{
 }
 const cacheKey = c => (S.level || 'B1') + '|' + c.sel.toLowerCase() + '||' + c.sentence.slice(0, 220);
 async function translate(c) {
+  if (!LS.get('lr_tried', false)) { LS.set('lr_tried', true); $('#wordHint').classList.remove('on'); $('#wordHint').setAttribute('aria-hidden', 'true'); }
   if (aborter) aborter.abort(); aborter = new AbortController(); const signal = aborter.signal;
   if (useBubble()) openBubble(c);
   else {
@@ -1616,6 +1682,8 @@ const saveNow = () => { if (progT) { clearTimeout(progT); progT = null; saveBook
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { saveNow(); flush(); } });
 addEventListener('pagehide', saveNow);
 boot();
+// читалку подгружаем заранее, когда телефон свободен: «Читать» открывает книгу без ожидания
+setTimeout(() => { const go = () => loadEpub().catch(() => {}); 'requestIdleCallback' in window ? requestIdleCallback(go, { timeout: 4000 }) : go(); }, 1200);
 $('#keySkip').addEventListener('click', () => LS.set('lr_skipkey', true));
 window.__lr = { get rendition() { return rendition; }, get book() { return book; }, S, timings, sync, get queue() { return queue; }, get user() { return user; } };
 })();

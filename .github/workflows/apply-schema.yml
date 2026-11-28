@@ -17,6 +17,9 @@ on:
         type: choice
         options: [report, apply]
 
+permissions:
+  contents: read
+
 jobs:
   db:
     runs-on: ubuntu-latest
@@ -30,12 +33,13 @@ jobs:
         run: |
           cat > /tmp/q.sh <<'EOF'
           # $1 — файл с SQL; печатает ответ, падает при ошибке
+          set -euo pipefail
           body=$(jq -Rs '{query: .}' "$1")
           code=$(curl -sS -o /tmp/out.json -w '%{http_code}' -X POST \
             "https://api.supabase.com/v1/projects/$REF/database/query" \
             -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$body")
           echo "HTTP $code"
-          if [ "$code" -ge 300 ]; then cat /tmp/out.json; exit 1; fi
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then cat /tmp/out.json; exit 1; fi
           jq -c '.[]?' /tmp/out.json 2>/dev/null || cat /tmp/out.json
           EOF
           chmod +x /tmp/q.sh

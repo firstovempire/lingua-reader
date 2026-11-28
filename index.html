@@ -24,10 +24,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Merriweather:wght@400;700&family=PT+Serif:wght@400;700&family=Lora:wght@400;600&display=swap">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Merriweather:wght@400;700&family=PT+Serif:wght@400;700&family=Lora:wght@400;600&display=swap"></noscript>
-<script src="lib/jszip.min.js"></script>
-<script src="lib/epub.min.js"></script>
-<script src="config.js"></script>
-<script src="lib/supabase.js"></script>
+<script defer src="config.js"></script>
+<script defer src="lib/supabase.js"></script>
 <style>
 :root{
   --bg:#F6F1E7; --paper:#FBF8F1; --card:#FFFFFF; --ink:#2A2620; --ink2:#4A443B; --muted:#6F675B;
@@ -96,6 +94,11 @@ body.tabs #tabbar{display:grid}
 .lvl[aria-checked=true] b{background:var(--accent);color:var(--accent-ink)}
 .lvl span{display:flex;flex-direction:column;gap:2px}
 .lvl small{font-size:14px;color:var(--muted)}
+.wst{font-size:12px;color:var(--muted);margin-top:2px}
+.wst.ok{color:var(--accent)}
+/* онбординг на низком экране (панели браузера): кнопка внизу всегда видна, уровни плотнее */
+#lvlBtns{position:sticky;bottom:0;z-index:2;margin-top:auto;background:var(--bg);box-shadow:0 -16px 14px -6px var(--bg);padding:6px 0 calc(var(--safe-b) + 12px);margin-bottom:calc(-1 * (var(--safe-b) + 12px))}
+@media (max-height:700px){.lvl{padding:8px 12px}.lvl b{width:40px;height:40px;font-size:16px}#sLevel .title{font-size:24px!important}}
 .num{width:28px;height:28px;flex:none;border-radius:50%;background:var(--ink);color:var(--paper);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center}
 code{background:var(--soft);padding:1px 5px;border-radius:5px;font-size:13px}
 
@@ -135,6 +138,9 @@ body.scrollmode #viewer .epub-container{-webkit-overflow-scrolling:touch}
 #miniBar i{display:block;height:100%;width:0;background:var(--accent);opacity:.7;transition:width .3s}
 #tapHint{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:999px;font-size:14px;white-space:nowrap;z-index:12;opacity:0;pointer-events:none;transition:opacity .3s}
 #tapHint.on{opacity:.92}
+#wordHint{position:absolute;left:50%;bottom:calc(var(--safe-b) + 56px);transform:translate(-50%,8px);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:999px;font-size:15px;width:max-content;max-width:calc(100% - 32px);text-align:center;z-index:12;opacity:0;pointer-events:none;transition:opacity .3s,transform .3s;box-shadow:0 6px 16px rgba(0,0,0,.18)}
+#wordHint.on{opacity:.94;transform:translate(-50%,0)}
+body.chrome #wordHint,#nextCh.on~#wordHint{opacity:0}
 #mini{position:absolute;left:var(--gut);right:var(--gut);bottom:calc(var(--safe-b) + 12px);display:flex;justify-content:center;align-items:center;gap:8px;font-size:12px;color:var(--muted);pointer-events:none;white-space:nowrap;font-variant-numeric:tabular-nums}
 #loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;gap:8px;color:var(--muted);background:var(--paper);z-index:4}
 #rtop,#rbottom{position:absolute;left:0;right:0;z-index:10;background:var(--paper);transition:transform .22s ease,opacity .22s ease}
@@ -566,7 +572,7 @@ body[data-theme=night] .cat-ad{color:#FBF2D6}
       <p style="margin:0;font-size:16px;color:var(--ink2)">Под него подстроим объяснения и примеры. Поменять можно в профиле.</p>
     </div>
     <div role="radiogroup" aria-label="Уровень" id="lvlList" style="display:flex;flex-direction:column;gap:10px"></div>
-    <button class="btn primary big" id="lvlNext" style="margin-top:auto">Дальше</button>
+    <div id="lvlBtns"><button class="btn primary big" id="lvlNext" style="width:100%">Дальше</button></div>
   </div></div>
 </section>
 
@@ -613,7 +619,7 @@ body[data-theme=night] .cat-ad{color:#FBF2D6}
 <!-- слова -->
 <section id="sWords" class="screen" aria-label="Слова">
   <div class="scroll"><div class="wrap" style="gap:14px">
-    <header style="display:flex;align-items:baseline;gap:10px"><h1 class="title">Слова</h1><span class="muted" id="wCount"></span></header>
+    <header style="display:flex;align-items:baseline;gap:10px"><h1 class="title">Слова</h1><span class="muted" id="wCount" style="flex:1"></span><button class="icobtn" id="wExport" aria-label="Выгрузить словарь (для Anki и таблиц)" title="Выгрузить словарь" style="align-self:center;display:none"><svg class="i" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg></button></header>
     <label style="display:flex;align-items:center;gap:10px;min-height:44px;padding:0 14px;border-radius:12px;background:var(--paper);border:1px solid var(--line);color:var(--muted)">
       <svg class="i" viewBox="0 0 24 24" style="width:20px;height:20px"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       <span class="vh">Поиск по словам</span><input id="wSearch" type="search" placeholder="Найти слово" style="flex:1;border:0;background:transparent;font-size:16px;outline:none;min-height:42px">
@@ -648,6 +654,7 @@ body[data-theme=night] .cat-ad{color:#FBF2D6}
   <button id="nextCh" class="btn dark">Следующая глава<svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="m9 6 6 6-6 6"/></svg></button>
   <div id="mini"><span id="miniBar" aria-hidden="true"><i></i></span><span id="miniPct"></span></div>
   <div id="tapHint" aria-hidden="true">Меню — коснитесь поля сверху или снизу</div>
+  <div id="wordHint" role="status" aria-hidden="true">Коснитесь слова — появится перевод</div>
   <div id="loading"><span class="spin"></span>Открываю книгу…</div>
   <header id="rtop"><div class="row">
     <button class="icobtn" id="rBack" aria-label="К библиотеке"><svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
@@ -689,6 +696,6 @@ body[data-theme=night] .cat-ad{color:#FBF2D6}
 <div id="toast" role="status"></div>
 <div id="netBar" role="status" aria-live="polite"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8.5a15 15 0 0 1 20 0M5.5 12a10 10 0 0 1 13 0M9 15.5a5 5 0 0 1 6 0"/><path d="M3 3l18 18"/></svg>Нет интернета · всё сохраняется на устройстве</div>
 
-<script src="app.js"></script>
+<script defer src="app.js"></script>
 </body>
 </html>

@@ -43,6 +43,21 @@ for (const size of SIZES) {
     expect(errors).toEqual([]);
   });
 
+  test('уровень и ключ помещаются ' + name, async ({ browser }, info) => {
+    const { page, errors } = await phone(browser, size, { seed: { lr_s: {} } });
+    await page.goto('/');
+    await expect(page.locator('#sLevel')).toHaveClass(/on/);
+    const next = await box(page, '#lvlNext');
+    expect(next.y + next.height, 'кнопка «Дальше» видна').toBeLessThanOrEqual(size.height);
+    await noSideScroll(page);
+    await info.attach('уровень ' + name, { body: await page.screenshot(), contentType: 'image/png' });
+    await page.locator('#lvlNext').click();
+    await expect(page.locator('#sKey')).toHaveClass(/on/);
+    await noSideScroll(page);
+    await info.attach('ключ ' + name, { body: await page.screenshot(), contentType: 'image/png' });
+    expect(errors).toEqual([]);
+  });
+
   test('вкладки ' + name, async ({ browser }, info) => {
     const { page, errors } = await phone(browser, size);
     await page.goto('/');
@@ -84,5 +99,53 @@ test('книга из каталога открывается в читалке'
   const frame = page.frameLocator('#viewer iframe').first();
   await expect(frame.locator('body')).toContainText(/\w{3,}/, { timeout: 15000 });
   await page.locator('#rBack').click({ force: true }).catch(() => {});
+  expect(errors).toEqual([]);
+});
+
+test('первое чтение: подсказка «коснитесь слова», после касания исчезает', async ({ browser }, info) => {
+  const { page, errors } = await phone(browser, SIZES[0], { seed: Object.assign({}, SEED, { lr_words: [] }) });
+  await page.goto('/');
+  await page.locator('#contBox button', { hasText: 'Читать' }).click();
+  await expect(page.locator('#loading')).toBeHidden({ timeout: 30000 });
+  await expect(page.locator('#wordHint')).toHaveClass(/on/);
+  const hint = await box(page, '#wordHint');
+  expect(hint.x, 'не обрезана слева').toBeGreaterThanOrEqual(0);
+  expect(hint.x + hint.width, 'не обрезана справа').toBeLessThanOrEqual(SIZES[0].width);
+  await info.attach('подсказка', { body: await page.screenshot(), contentType: 'image/png' });
+  // касание первого слова текста: координаты внутри iframe + положение самого iframe
+  const fr = page.locator('#viewer iframe').first(); await expect(fr).toBeVisible();
+  const ib = await fr.boundingBox();
+  const pt = await page.frames().find(f => f !== page.mainFrame()).evaluate(() => {
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode: n => /[A-Za-z]{4,}/.test(n.data) ? 1 : 2 });
+    for (let n; (n = w.nextNode());) { const i = n.data.search(/[A-Za-z]{4,}/), r = document.createRange(); r.setStart(n, i); r.setEnd(n, i + 3); const b = r.getBoundingClientRect(); if (b.width && b.left >= 0 && b.left < innerWidth) return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; }
+  });
+  await page.touchscreen.tap(ib.x + pt.x, ib.y + pt.y);
+  await expect(page.locator('#wordHint')).not.toHaveClass(/on/);
+  expect(await page.evaluate(() => localStorage.getItem('lr_tried'))).toBe('true');
+  expect(errors).toEqual([]);
+});
+
+test('повреждённая книга: понятное сообщение и назад в библиотеку', async ({ browser }) => {
+  const { page } = await phone(browser, SIZES[1], { seed: Object.assign({}, SEED, { lr_books: [{ id: 'bad1', title: 'Broken', author: 'X', added: T0, pct: 0, lastRead: T0 + 5, up: true }] }) });
+  await page.goto('/');
+  await expect(page.locator('#sLib')).toHaveClass(/on/);
+  await page.evaluate(() => new Promise((ok, no) => { const r = indexedDB.open('lr-files', 1); r.onupgradeneeded = () => r.result.createObjectStore('f'); r.onsuccess = () => { try { const db = r.result; const st = 'f'; const tx = db.transaction(st, 'readwrite'); tx.objectStore(st).put(new TextEncoder().encode('not a zip at all').buffer, 'bad1'); tx.oncomplete = ok; tx.onerror = no; } catch (e) { no(e); } }; r.onerror = no; }));
+  await page.locator('#contBox button', { hasText: 'Читать' }).click();
+  await expect(page.locator('#toast')).toContainText(/не удалось открыть книгу/i, { timeout: 20000 });
+  await expect(page.locator('#sLib')).toHaveClass(/on/);
+});
+
+test('слова: состояние повторения и выгрузка словаря файлом', async ({ browser }) => {
+  const { page, errors } = await phone(browser, { width: 1000, height: 740 });
+  await page.goto('/');
+  await page.locator('#tabbar button[data-go=Words], [data-go=Words]').first().click();
+  await expect(page.locator('#sWords')).toHaveClass(/on/);
+  await expect(page.locator('.wst').first()).toHaveText('пора повторить');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#wExport').click()]);
+  expect(dl.suggestedFilename()).toMatch(/^lingua-slova-\d{4}-\d{2}-\d{2}\.txt$/);
+  const txt = require('fs').readFileSync(await dl.path(), 'utf8');
+  expect(txt).toContain('#separator:tab');
+  expect(txt).toContain('countenance\tвыражение лица');
+  expect(txt).toContain('Pride and Prejudice');
   expect(errors).toEqual([]);
 });
