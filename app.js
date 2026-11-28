@@ -699,6 +699,20 @@ const BOOKS_CACHE = 'lr-books'; // sw.js его не трогает при об�
 const catDir = id => 'catalog/books/' + id + '/';
 const catSaved = LS.get('lr_catsaved', {}); // id → true: книга сохранена целиком на этом устройстве
 const catSaving = new Map(); // id → доля 0…1, пока идёт фоновая загрузка
+const catV = LS.get('lr_catv', {}); // id → отпечаток версии книги, которую телефон начал сохранять
+const catVChecked = new Set();
+// книгу на сайте обновили (catalog/unpack.js) — старые главы не смешиваем с новыми: всё сохранённое убираем.
+// Раз за сеанс на книгу, перед открытием; без сети или если сервер молчит 3 с — читаем то, что есть
+async function checkCatVersion(id) {
+  if (catVChecked.has(id) || !navigator.onLine || !('caches' in window)) return;
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 3000);
+    const r = await fetch(catDir(id) + 'files.json', { cache: 'no-store', signal: ctl.signal }); clearTimeout(t);
+    if (!r.ok) return; const v = (await r.json()).v; catVChecked.add(id);
+    if (catV[id] && v && catV[id] !== v) await dropCat(id);
+    if (v) { catV[id] = v; LS.set('lr_catv', catV); }
+  } catch (e) {}
+}
 const catFails = new Map(); // id → сколько раз за сеанс не удалось сохранить (файл пропал, сеть рвётся)
 async function saveCat(id) {
   if (catSaved[id] || catSaving.has(id) || !('caches' in window) || !navigator.onLine || (catFails.get(id) || 0) >= 3) return;
@@ -710,13 +724,14 @@ async function saveCat(id) {
     const cache = await caches.open(BOOKS_CACHE), dir = catDir(id);
     const fresh = await fetch(dir + 'files.json', { cache: 'no-store' }); if (!fresh.ok) throw new Error('files.json ' + fresh.status);
     const list = await fresh.clone().json();
-    // книгу на сайте обновили (catalog/unpack.js) — старые главы не смешиваем с новыми
-    const old = await cache.match(dir + 'files.json'); if (old) { const o = await old.json().catch(() => ({})); if (o.v !== list.v) await dropCat(id); }
+    catV[id] = list.v; LS.set('lr_catv', catV);
     const urls = list.files.map(f => dir + f.split('/').map(encodeURIComponent).join('/'));
     let done = 0, i = 0;
     // по 3 файла сразу; уже сохранённое (например, прочитанные главы) не качаем заново; ошибка останавливает всех
-    const worker = async () => { while (i < urls.length && !stop) { const u = urls[i++]; try { if (!(await cache.match(u))) await cache.add(u); } catch (e) { stop = true; throw e; } done++; catSaving.set(id, done / urls.length); if (current === 'Lib' && !(done % 10)) updCatStatus(); } };
+    const gone = () => !books.some(b => b.cat === id); // книгу удалили, пока качали — остановиться и ничего не оставлять
+    const worker = async () => { while (i < urls.length && !stop && !gone()) { const u = urls[i++]; try { if (!(await cache.match(u))) await cache.add(u); } catch (e) { stop = true; throw e; } done++; catSaving.set(id, done / urls.length); if (current === 'Lib' && !(done % 10)) updCatStatus(); } };
     await Promise.all([worker(), worker(), worker()]);
+    if (gone()) { await dropCat(id); return; }
     await cache.put(dir + 'files.json', fresh); // список кладём последним: он означает «книга сохранена целиком»
     catSaved[id] = true; LS.set('lr_catsaved', catSaved);
   } catch (e) { stop = true; catFails.set(id, (catFails.get(id) || 0) + 1); console.warn('saveCat', id, e); } // докачаем позже, уже сохранённое не пропадёт
@@ -731,11 +746,11 @@ async function saveAllCats() {
     if (!catChecked && 'caches' in window) { catChecked = true; const cache = await caches.open(BOOKS_CACHE); for (const id of Object.keys(catSaved)) if (!(await files.get('cat-' + id).catch(() => null)) && !(await cache.match(catDir(id) + 'files.json'))) { delete catSaved[id]; LS.set('lr_catsaved', catSaved); } }
     // режим экономии трафика: заранее не качаем, сохраняется только открытая книга
     const conn = /** @type {any} */ (navigator).connection; if (conn && conn.saveData) return;
-    for (const b of books.slice()) if (b.cat && !catSaved[b.cat]) await saveCat(b.cat);
+    for (const b of books.slice()) if (b.cat) { await checkCatVersion(b.cat); if (!catSaved[b.cat]) await saveCat(b.cat); }
   } finally { savingAll = false; }
 }
 async function dropCat(id) {
-  delete catSaved[id]; LS.set('lr_catsaved', catSaved);
+  delete catSaved[id]; LS.set('lr_catsaved', catSaved); delete catV[id]; LS.set('lr_catv', catV);
   try { const cache = await caches.open(BOOKS_CACHE), dir = new URL(catDir(id), location.href).href; for (const r of await cache.keys()) if (r.url.startsWith(dir)) await cache.delete(r); } catch (e) {}
 }
 // строка «Сохраняю для чтения без сети… 40%» у книги в библиотеке
@@ -1004,6 +1019,7 @@ async function openBook(b, atCfi) {
   let buf; try { buf = await files.get(b.id); } catch (e) {}
   // книга каталога без старой полной копии: читаем по главам прямо с сайта, целиком докачивается фоном (saveCat)
   const stream = !buf && !!b.cat;
+  if (stream) { await checkCatVersion(b.cat); if (stale()) return; }
   if (!buf && CLOUD && user && !b.cat) {
     $('#loading').lastChild.textContent = 'Скачиваю книгу…';
     try { const r = await sb.storage.from('books').download(bookPath(b)); if (r.error) throw r.error; buf = await r.data.arrayBuffer(); await files.put(b.id, buf); } catch (e) { console.warn(e); }

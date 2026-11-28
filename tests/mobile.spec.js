@@ -274,3 +274,16 @@ test('книга каталога: открывается по главам, с�
   expect(L.okImgs).toBe(L.imgs);
   expect(errors).toEqual([]);
 });
+
+test('книгу каталога обновили на сайте — старые сохранённые главы убираются перед открытием', async ({ browser }) => {
+  const id = 'jane-austen_pride-and-prejudice';
+  const { page, errors } = await phone(browser, SIZES[1], { seed: Object.assign({}, SEED, { lr_tried: true, lr_catsaved: { [id]: true }, lr_catv: { [id]: 'old-version' } }) });
+  await page.goto('/');
+  await page.evaluate(async dir => { const c = await caches.open('lr-books'); await c.put(dir + 'epub/text/chapter-1.xhtml', new Response('старая глава')); }, 'catalog/books/' + id + '/');
+  await page.locator('#contBox button', { hasText: 'Читать' }).click();
+  await expect(page.locator('#loading')).toBeHidden({ timeout: 30000 });
+  const st = await page.evaluate(async dir => ({ old: !!(await (await caches.open('lr-books')).match(dir + 'epub/text/chapter-1.xhtml').then(r => r && r.text()).then(t => t === 'старая глава')), v: JSON.parse(localStorage.getItem('lr_catv'))[location.pathname && 'jane-austen_pride-and-prejudice'] }), 'catalog/books/' + id + '/');
+  expect(st.old, 'старая глава удалена').toBe(false);
+  expect(st.v).not.toBe('old-version');
+  expect(errors).toEqual([]);
+});
