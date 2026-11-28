@@ -63,7 +63,7 @@ const loadEpub = () => /** @type {any} */ (window).ePub ? Promise.resolve() : ep
   const add = src => new Promise((ok, no) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => { el.remove(); no(new Error('Не удалось загрузить читалку. Проверьте интернет.')); }; document.head.append(el); });
   try { await add('lib/jszip.min.js'); await add('lib/epub.min.js'); } catch (e) { epubP = null; throw e; }
 })());
-function speak(text) { try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'en-US'; u.rate = 0.9; const v = speechSynthesis.getVoices().find(v => /^en(-|_)US/i.test(v.lang)); if (v) u.voice = v; speechSynthesis.speak(u); } catch (e) {} }
+function speak(text, rate = 0.9) { try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'en-US'; u.rate = rate; const v = speechSynthesis.getVoices().find(v => /^en(-|_)US/i.test(v.lang)); if (v) u.voice = v; speechSynthesis.speak(u); } catch (e) {} }
 
 /* ================= облако ================= */
 const CFG = window.LR_CONFIG || {};
@@ -770,15 +770,18 @@ function renderReview() {
   const no = h('div', { class: 'rv-ov no' }, svgEl('<circle cx="60" cy="60" r="52" stroke-width="4" opacity=".35"/><path d="M42 42l36 36M78 42L42 78"/>', '0 0 120 120'));
   const card = h('div', { class: 'rv-card enter', role: 'button', tabindex: '0', 'aria-label': rv.shown ? 'Карточка' : 'Показать ответ' }, ok, no,
     h('span', { class: 'rv-book', text: b ? b.title : '' }));
-  if (ruFirst) card.append(h('span', { class: 'rv-tr', text: w.tr || '' }), markSentence(w.s, w.w, !rv.shown));
-  else card.append(h('span', { class: 'rv-word', lang: 'en', text: w.w }), markSentence(w.s, w.w, false));
+  // лицевая сторона — только слово (или перевод): предложение подсказывает ответ, его показываем после переворота
+  if (ruFirst) card.append(h('span', { class: 'rv-tr', text: w.tr || '' }));
+  else card.append(h('span', { class: 'rv-word', lang: 'en', text: w.w }));
   if (!rv.shown) card.append(h('span', { class: 'muted', style: 'font-size:14px', text: ruFirst ? 'Вспомните слово на английском · коснитесь, чтобы проверить' : 'Вспомните перевод · коснитесь, чтобы проверить' }));
   else {
     const back = h('div', { class: 'rv-back' },
       ruFirst ? h('span', { class: 'rv-word', lang: 'en', text: w.w }) : h('span', { class: 'rv-tr', text: w.tr || '' }),
       w.tc ? h('span', { class: 'muted', style: 'font-size:14px', text: w.tc }) : null,
-      w.exp ? h('span', { style: 'font-size:14px;color:var(--ink2)', text: w.exp }) : null);
-    const ex = Array.isArray(w.ex) ? w.ex[0] : w.ex; if (ex && ex.en) back.append(h('div', { class: 'sh-ex', style: 'text-align:left;margin-top:4px' }, h('div', { class: 'en', lang: 'en', text: ex.en }), h('div', { class: 'ru', text: ex.ru || '' })));
+      w.exp ? h('span', { style: 'font-size:14px;color:var(--ink2)', text: w.exp }) : null,
+      w.s ? h('button', { class: 'rv-sbtn', 'aria-label': 'Прослушать предложение', onclick: ev => { ev.stopPropagation(); speak(w.s, 0.85); } }, markSentence(w.s, w.w, false), ico('speak', 16)) : null,
+      w.st ? h('span', { class: 'rv-st', text: w.st }) : null);
+    const ex = Array.isArray(w.ex) ? w.ex[0] : w.ex; if (ex && ex.en && !w.s) back.append(h('div', { class: 'sh-ex', style: 'text-align:left;margin-top:4px' }, h('div', { class: 'en', lang: 'en', text: ex.en }), h('div', { class: 'ru', text: ex.ru || '' })));
     card.append(back);
   }
   card.append(h('button', { class: 'icobtn rv-speak', 'aria-label': 'Произнести', onclick: ev => { ev.stopPropagation(); speak(w.w); } }, ico('speak', 20)));
@@ -1344,6 +1347,7 @@ function paintBubble(c, r, done, err) {
     phraseList(r, 3),
     h('div', { class: 'bb-acts' },
       err ? (err.needKey ? h('button', { class: 'btn primary', onclick: () => openKey('Reader') }, 'Добавить ключ') : h('button', { class: 'btn', onclick: () => translate(c) }, 'Повторить')) : null,
+      h('button', { class: 'btn', 'aria-label': 'Прослушать предложение', title: 'Прослушать предложение', onclick: () => speak(c.sentence, 0.85) }, ico('speak', 18)),
       h('button', { class: 'btn', 'aria-label': 'Цитата', title: 'Цитата', onclick: () => addQuote(c) }, ico('quote', 18)),
       h('button', { class: 'btn', 'aria-label': 'Заметка', title: 'Заметка', onclick: () => openNote(c) }, ico('note', 18)),
       h('span', { style: 'flex:1' }),
@@ -1396,7 +1400,7 @@ function paint(c, r, done) {
   if (r.explanation) body.append(h('div', { class: 'sh-sec full-only' }, h('h4', null, 'Почему так'), h('p', { text: r.explanation })));
   const bookP = h('p', { class: 'book', lang: 'en' }); const i = c.sentence.toLowerCase().indexOf(c.sel.toLowerCase());
   if (i >= 0) bookP.append(c.sentence.slice(0, i), h('mark', { text: c.sentence.slice(i, i + c.sel.length) }), c.sentence.slice(i + c.sel.length)); else bookP.textContent = c.sentence;
-  body.append(h('div', { class: 'sh-sec full-only' }, h('h4', null, 'В книге'), bookP, r.sentence_translation ? h('p', { class: 'muted', style: 'font-size:14px;margin-top:4px', text: r.sentence_translation }) : null));
+  body.append(h('div', { class: 'sh-sec full-only' }, h('h4', { class: 'h4-act' }, 'В книге', h('button', { class: 'say', 'aria-label': 'Прослушать предложение', onclick: () => speak(c.sentence, 0.85) }, ico('speak', 16), 'Прослушать')), bookP, r.sentence_translation ? h('p', { class: 'muted', style: 'font-size:14px;margin-top:4px', text: r.sentence_translation }) : null));
   if (ex.length) body.append(h('div', { class: 'sh-sec full-only' }, h('h4', null, 'Пример'), h('div', { class: 'exs' }, ex.slice(0, 1).map(x => h('div', { class: 'row' }, h('div', null, h('div', { class: 'en', lang: 'en', text: x.en }), h('div', { class: 'ru', text: x.ru || '' })), iconBtn('speak', 'Произнести пример', () => speak(x.en), 'icobtn', 18))))));
   body.append(h('div', { class: 'sh-acts peek-only' },
     h('button', { class: 'btn', onclick: () => addQuote(c) }, ico('quote', 18), 'Цитата'),
