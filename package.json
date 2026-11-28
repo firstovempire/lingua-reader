@@ -1,0 +1,14 @@
+{
+  "name": "lingua-reader",
+  "private": true,
+  "description": "Только для проверок и тестов. Сам сайт работает без сборки и без этих пакетов.",
+  "scripts": {
+    "check": "node tests/check.js",
+    "types": "tsc -p .",
+    "test": "node tests/check.js && tsc -p . && playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -2,10 +2,11 @@
    Читалка EPUB: тап по слову → перевод с контекстом (Gemini), фраза двумя тапами,
    листание тапом по краям и свайпом, шторка перевода, Aa, оглавление, закладки,
    цитаты и заметки, поиск по книге, слова по книгам. Всё хранится в этом браузере. */
+// @ts-check — типы проверяет `npm run types` (TypeScript без сборки), внешние имена описаны в types.d.ts
 (() => {
 'use strict';
 
-const VER = 36; // как в sw.js (lingua-vNN), видно в профиле
+const VER = 39; // как в sw.js (lingua-vNN), видно в профиле
 
 /* ================= утилиты ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -68,7 +69,6 @@ let marks = LS.get('lr_marks', []);
 const DEV = LS.get('lr_dev', '') || (() => { const d = uid().slice(-6); LS.set('lr_dev', d); return d; })();
 let days = LS.get('lr_days', []);
 const saveDays = () => { LS.set('lr_days', days); schedule(); };
-const cache = LS.get('lr_cache', {});
 const saveBooks = () => { LS.set('lr_books', books); schedule(); }, saveWords = () => { LS.set('lr_words', words); schedule(); }, saveNotes = () => { LS.set('lr_notes', notes); schedule(); }, saveMarks = () => { LS.set('lr_marks', marks); schedule(); };
 const getKey = () => CLOUD ? (keyLast4 ? '••••' + keyLast4 : '') : LS.get('lr_key', '');
 
@@ -77,21 +77,43 @@ const DAY = 86400000;
 const EMPTY_SNAP = () => ({ book: {}, word: {}, note: {}, mark: {}, day: {}, set: {} });
 let snap = LS.get('lr_snap', null) || EMPTY_SNAP(); if (!snap.day) snap.day = {};
 let queue = LS.get('lr_queue', {});
+// какую версию каждой записи (время записи на сервере) устройство видело последней. Правка с устройства
+// конфликтует, только если сервер с тех пор изменился, — часы устройства в этом не участвуют
+let srvAt = LS.get('lr_seen', {});
+const qItem = (kind, id, data) => ({ kind, id, data, base: srvAt[kind + '|' + id] || '' });
 let syncT = null, syncing = false;
 const KARR = { book: () => books, word: () => words, note: () => notes, mark: () => marks, day: () => days };
 function diffAll() {
   for (const k of Object.keys(KARR)) {
     const seen = new Set();
-    for (const o of KARR[k]()) { if (!o || !o.id) continue; seen.add(o.id); const j = JSON.stringify(o); if (snap[k][o.id] !== j) { snap[k][o.id] = j; queue[k + '|' + o.id] = { kind: k, id: o.id, data: o, at: Date.now() }; } }
-    for (const id of Object.keys(snap[k])) if (!seen.has(id)) { delete snap[k][id]; queue[k + '|' + id] = { kind: k, id, data: null, at: Date.now() }; }
+    for (const o of KARR[k]()) { if (!o || !o.id) continue; seen.add(o.id); const j = JSON.stringify(o); if (snap[k][o.id] !== j) { snap[k][o.id] = j; queue[k + '|' + o.id] = qItem(k, o.id, o); } }
+    for (const id of Object.keys(snap[k])) if (!seen.has(id)) { delete snap[k][id]; queue[k + '|' + id] = qItem(k, id, null); }
   }
-  const js = JSON.stringify(S); if (snap.set.S !== js) { snap.set.S = js; queue['set|S'] = { kind: 'set', id: 'S', data: S, at: Date.now() }; }
+  const js = JSON.stringify(S); if (snap.set.S !== js) { snap.set.S = js; queue['set|S'] = qItem('set', 'S', S); }
 }
-function schedule() { if (!CLOUD || !user) return; diffAll(); LS.set('lr_snap', snap); LS.set('lr_queue', queue); clearTimeout(syncT); syncT = setTimeout(flush, 1200); }
+function schedule() { if (!CLOUD || !user) return; diffAll(); LS.set('lr_snap', snap); LS.set('lr_queue', queue); clearTimeout(syncT); syncT = setTimeout(flush, 1200); updSync(); }
+/* --- связь. Без интернета сайт работает дальше: всё сохраняется на устройстве и уходит на сервер, когда связь вернётся --- */
+const sync = { offline: false, err: '', okAt: LS.get('lr_syncok', 0) };
+const isNetErr = e => !!e && (e.name === 'TypeError' || e.name === 'AuthRetryableFetchError' || /fetch|network|load failed|timeout|offline/i.test(String(e.message || e)));
+function setOffline(v) {
+  if (sync.offline === v) return;
+  sync.offline = v; updNet();
+  if (!v) { upgradeSession(); flush(); }
+}
+function updNet() { $('#netBar').classList.toggle('on', CLOUD && sync.offline && !!user && current !== 'Login'); updSync(); }
+// строка «Синхронизация» в профиле
+function syncText() {
+  const n = Object.keys(queue).length;
+  if (sync.offline) return n ? 'нет сети · ждёт отправки ' + n : 'нет сети';
+  if (sync.err) return 'ошибка · не отправлено ' + n;
+  if (n) return 'отправляю ' + n + '…';
+  return 'всё сохранено';
+}
+function updSync() { const el = document.getElementById('syncVal'); if (el) el.textContent = syncText(); }
 async function flush() {
-  if (!CLOUD || !user || syncing) return;
-  const items = Object.entries(queue); if (!items.length) return;
-  syncing = true; let bad = false;
+  if (!CLOUD || !user || !user.email || syncing || sync.offline) return;
+  const items = Object.entries(queue); if (!items.length) { updSync(); return; }
+  syncing = true; let bad = false, err = '';
   try {
     const now = new Date().toISOString();
     // каждый вид отдельно: если сервер не примет один (например, база ещё не знает новый вид), остальные всё равно уйдут
@@ -100,34 +122,65 @@ async function flush() {
       for (let i = 0; i < list.length; i += 200) {
         const part = list.slice(i, i + 200);
         const rows = part.map(([, it]) => ({ kind: it.kind, id: it.id, data: it.data ? JSON.parse(JSON.stringify(it.data)) : {}, deleted: !it.data, updated_at: now }));
-        const r = await sb.from('items').upsert(rows, { onConflict: 'user_id,kind,id' });
-        if (r.error) { console.warn('sync failed', part[0][1].kind, r.error); bad = true; break; }
+        const r = await sb.from('items').upsert(rows, { onConflict: 'user_id,kind,id' }).select('kind,id,updated_at');
+        if (r.error) { if (isNetErr(r.error)) throw r.error; bad = true; err = part[0][1].kind + ': ' + r.error.message; logErr('sync ' + part[0][1].kind, r.error); break; }
+        for (const x of r.data || []) srvAt[x.kind + '|' + x.id] = x.updated_at;
         for (const [k, it] of part) if (queue[k] === it) delete queue[k];
       }
     }
-    LS.set('lr_queue', queue);
-  } catch (e) { console.warn('sync failed', e); bad = true; }
+    LS.set('lr_queue', queue); LS.set('lr_seen', srvAt);
+    if (!bad) { sync.okAt = Date.now(); LS.set('lr_syncok', sync.okAt); }
+    sync.err = err;
+  } catch (e) { bad = true; if (isNetErr(e)) setOffline(true); else { sync.err = String(e.message || e); logErr('sync', e); } }
   finally { syncing = false; }
-  if (bad) { clearTimeout(syncT); syncT = setTimeout(flush, 15000); }
+  updSync();
+  if (bad && !sync.offline) { clearTimeout(syncT); syncT = setTimeout(flush, 30000); }
 }
-async function pull() {
+// Забрать данные с сервера. Обычно — только изменённое с прошлого раза; целиком — раз в сутки и при входе
+async function pull(full) {
+  const mark = LS.get('lr_pulled', null);
+  if (!mark || !mark.at || Date.now() - (mark.full || 0) > DAY) full = true;
+  const since = full ? null : new Date(Date.parse(mark.at) - 120000).toISOString(); // запас на запись, которая шла в тот же момент
   const all = [];
-  for (let from = 0; ; from += 1000) { const r = await sb.from('items').select('kind,id,data,deleted,updated_at').order('kind').order('id').range(from, from + 999); if (r.error) throw r.error; all.push(...r.data); if (r.data.length < 1000) break; }
+  try {
+    for (let from = 0; ; from += 1000) {
+      let q = sb.from('items').select('kind,id,data,deleted,updated_at');
+      if (since) q = q.gt('updated_at', since);
+      const r = await q.order('kind').order('id').range(from, from + 999).retry(false); // повторяем сами (связь вернулась, раз в полминуту), а отсутствие сети видно сразу
+      if (r.error) throw r.error; all.push(...r.data); if (r.data.length < 1000) break;
+    }
+  } catch (e) { if (isNetErr(e)) setOffline(true); else logErr('pull', e); throw e; }
+  if (sync.offline) { sync.offline = false; updNet(); } // без setOffline: отправлять очередь можно только после сверки ниже
+  let newest = full ? 0 : Date.parse(mark.at) || 0;
+  for (const r of all) newest = Math.max(newest, Date.parse(r.updated_at) || 0);
   // неотправленное с устройства против сервера: остаётся то, что новее. Иначе давно не открывавшийся телефон
   // затёр бы своим старым состоянием свежее с другого устройства
   const srv = new Map(all.map(r => [r.kind + '|' + r.id, r]));
   const stamp = (k, d) => !d ? 0 : k === 'book' ? (d.lastRead || d.added || 0) : Math.max(d.seen || 0, d.t || 0);
   let dropped = false;
   for (const [key, it] of Object.entries(queue)) {
-    const r = srv.get(key); if (!r || it.kind === 'day') continue;
+    const r = srv.get(key); if (!r || it.kind === 'day') continue; // статистика дней своя у каждого устройства
     const st = Date.parse(r.updated_at) || 0;
-    const older = it.at ? st > it.at // время постановки в очередь известно
-      : !!it.data && (it.kind === 'book' || it.kind === 'word') && (r.deleted ? st : stamp(it.kind, r.data)) > stamp(it.kind, it.data); // старые записи без времени
-    if (older) { delete queue[key]; dropped = true; }
+    let older;
+    if ('base' in it) {
+      if (it.base && st <= Date.parse(it.base)) continue; // сервер не менялся с тех пор, как устройство его видело
+      // правили и здесь, и на другом устройстве: у книги решает место чтения, у слова — последнее повторение, иначе — сервер
+      older = (it.kind === 'book' || it.kind === 'word') && it.data && !r.deleted ? stamp(it.kind, r.data) >= stamp(it.kind, it.data) : true;
+    } else older = !!it.data && (it.kind === 'book' || it.kind === 'word') && (r.deleted ? st : stamp(it.kind, r.data)) > stamp(it.kind, it.data); // записи старого формата
+    if (older) { delete queue[key]; dropped = true; } else { it.base = r.updated_at; dropped = true; }
   }
+  for (const r of all) srvAt[r.kind + '|' + r.id] = r.updated_at;
+  LS.set('lr_seen', srvAt);
   if (dropped) LS.set('lr_queue', queue);
-  const by = { book: [], word: [], note: [], mark: [], day: [] }; let set = null;
-  for (const row of all) { if (row.deleted) continue; if (row.kind === 'set') set = row.data; else if (by[row.kind]) by[row.kind].push(row.data); }
+  // целиком — собираем заново; частично — накладываем изменения на то, что уже есть
+  const by = full ? { book: [], word: [], note: [], mark: [], day: [] } : { book: books.slice(), word: words.slice(), note: notes.slice(), mark: marks.slice(), day: days.slice() };
+  let set = null;
+  for (const row of all) {
+    if (row.kind === 'set') { if (!row.deleted) set = row.data; continue; }
+    const arr = by[row.kind]; if (!arr) continue;
+    if (!full) { const i = arr.findIndex(x => x.id === row.id); if (i >= 0) arr.splice(i, 1); }
+    if (!row.deleted) arr.push(row.data);
+  }
   for (const it of Object.values(queue)) { if (it.kind === 'set') continue; const arr = by[it.kind]; const i = arr.findIndex(x => x.id === it.id); if (it.data) { if (i >= 0) arr[i] = it.data; else arr.push(it.data); } else if (i >= 0) arr.splice(i, 1); }
   const byT = (a, b) => (b.t || b.added || 0) - (a.t || a.added || 0);
   // книги обновляем на месте: читалка держит ссылку на объект, а более свежее место чтения с устройства не теряем
@@ -146,9 +199,32 @@ async function pull() {
   Object.assign(snap.book, ahead); // место на устройстве новее серверного — отправить
   snap.set.S = JSON.stringify(S);
   LS.set('lr_snap', snap);
+  LS.set('lr_pulled', { at: newest ? new Date(newest).toISOString() : '', full: full ? Date.now() : mark.full });
   if (Object.keys(ahead).length) schedule();
   if (Object.keys(queue).length) flush();
+  updSync();
 }
+/* --- журнал ошибок: тихо уходит на сервер (таблица errors), чтобы узнавать о сбоях раньше, чем о них напишут --- */
+const errQ = [], errSeen = new Set(); let errT = null, errOff = false;
+function logErr(place, e) {
+  try {
+    console.warn(place, e);
+    const msg = String((e && e.message) || e || '').slice(0, 500);
+    if (!CLOUD || errOff || !msg || /ResizeObserver loop|^Script error/.test(msg) || errSeen.size >= 30 || errSeen.has(place + msg)) return;
+    errSeen.add(place + msg);
+    errQ.push({ ver: VER, place: String(place).slice(0, 80), msg, stack: String((e && e.stack) || '').slice(0, 2000), ua: navigator.userAgent.slice(0, 300), screen: current });
+    clearTimeout(errT); errT = setTimeout(sendErrs, 5000);
+  } catch (x) {}
+}
+async function sendErrs() {
+  if (!errQ.length) return;
+  if (!user || !user.email || sync.offline) { clearTimeout(errT); errT = setTimeout(sendErrs, 60000); return; }
+  const rows = errQ.splice(0);
+  try { const r = await sb.from('errors').insert(rows); if (r.error) throw r.error; }
+  catch (e) { if (isNetErr(e)) { errQ.unshift(...rows); errT = setTimeout(sendErrs, 60000); } else { errOff = true; console.warn('errors log off', e); } } // нет таблицы — молчим до перезагрузки
+}
+addEventListener('error', e => logErr('window', e.error || e.message));
+addEventListener('unhandledrejection', e => logErr('promise', e.reason));
 const bookPath = b => user.id + '/' + b.id + '.epub';
 async function uploadBook(b, buf) {
   if (!CLOUD || !user) return;
@@ -162,6 +238,7 @@ async function ensureUploads() {
 
 /* ================= статистика: дни, серия, цель ================= */
 // строка на день и устройство: id = YYYY-MM-DD_dev, чтобы два устройства не перетирали друг друга
+/** @param {number|Date} [t] */
 const dkey = (t = Date.now()) => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 function today() { const id = dkey() + '_' + DEV; let d = days.find(x => x.id === id); if (!d) { d = { id, date: dkey(), read: 0, rev: 0, got: 0 }; days.push(d); } return d; }
 function dayTotals() { const m = {}; for (const d of days) { const x = m[d.date] || (m[d.date] = { read: 0, rev: 0, got: 0, saved: 0 }); x.read += d.read || 0; x.rev += d.rev || 0; x.got += d.got || 0; } for (const w of words) if (w.t) { const k = dkey(w.t); (m[k] || (m[k] = { read: 0, rev: 0, got: 0, saved: 0 })).saved++; } return m; }
@@ -171,7 +248,7 @@ function streakInfo() {
   const todayOn = activeDay(m[dkey(t)]); if (!todayOn) t.setDate(t.getDate() - 1);
   while (activeDay(m[dkey(t)])) { cur++; t.setDate(t.getDate() - 1); }
   let best = 0, run = 0, prev = null;
-  for (const k of Object.keys(m).filter(k => activeDay(m[k])).sort()) { const d = new Date(k + 'T12:00:00'); run = prev && Math.round((d - prev) / DAY) === 1 ? run + 1 : 1; best = Math.max(best, run); prev = d; }
+  for (const k of Object.keys(m).filter(k => activeDay(m[k])).sort()) { const d = new Date(k + 'T12:00:00'); run = prev && Math.round((+d - +prev) / DAY) === 1 ? run + 1 : 1; best = Math.max(best, run); prev = d; }
   return { cur, best: Math.max(best, cur), todayOn, m };
 }
 // время чтения: считаем, пока открыта книга, вкладка видна и было действие за последние 2 минуты
@@ -210,6 +287,29 @@ const files = {
   async get(k) { const db = await this.open(); return new Promise(res => { const r = db.transaction('f').objectStore('f').get(k); r.onsuccess = () => res(r.result); r.onerror = () => res(undefined); }); },
   async del(k) { const db = await this.open(); return new Promise(res => { const t = db.transaction('f', 'readwrite'); t.objectStore('f').delete(k); t.oncomplete = res; t.onerror = res; }); }
 };
+/* готовые переводы: в памяти для мгновенного показа, на диске — в IndexedDB.
+   В localStorage им было тесно: в Safari там около 5 МБ на всё, и при переполнении переставали сохраняться книги */
+const cache = {}, CACHE_MAX = 4000;
+const tc = {
+  db: null,
+  open() { return this.db || (this.db = new Promise((res, rej) => { const r = indexedDB.open('lr-cache', 1); r.onupgradeneeded = () => r.result.createObjectStore('c'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); })); },
+  async run(fn) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction('c', 'readwrite'); fn(t.objectStore('c')); t.oncomplete = () => res(); t.onerror = () => rej(t.error); }); },
+  async load() {
+    const old = LS.get('lr_cache', null); // переезд из localStorage
+    if (old) { const t = Date.now(); await this.run(st => Object.entries(old).forEach(([k, r], i) => st.put({ r, t: t - 1e6 + i }, k))); localStorage.removeItem('lr_cache'); }
+    const db = await this.open(), all = [];
+    await new Promise(res => { const q = db.transaction('c').objectStore('c').openCursor(); q.onsuccess = () => { const c = q.result; if (!c) return res(); all.push([c.key, c.value]); c.continue(); }; q.onerror = () => res(); });
+    all.sort((a, b) => a[1].t - b[1].t).forEach(([k, v]) => { if (!(k in cache)) cache[k] = v.r; });
+  },
+  put(k, r) {
+    delete cache[k]; cache[k] = r; // в конец: самые старые — первые
+    const ks = Object.keys(cache), drop = ks.length > CACHE_MAX ? ks.slice(0, 500) : [];
+    drop.forEach(x => delete cache[x]);
+    this.run(st => { st.put({ r, t: Date.now() }, k); drop.forEach(x => st.delete(x)); }).catch(e => logErr('cache put', e));
+  },
+  clear() { for (const x in cache) delete cache[x]; return this.run(st => st.clear()).catch(() => {}); }
+};
+tc.load().catch(e => console.warn('cache load', e));
 
 /* ================= экраны и навигация ================= */
 const SCREENS = ['Login', 'Level', 'Key', 'Lib', 'Words', 'Review', 'Profile', 'Reader'];
@@ -268,7 +368,7 @@ function show(name) {
   if (name === 'Words') renderWords();
   if (name === 'Profile') renderProfile();
   if (name === 'Review') { if (rv && rv.pos >= rv.queue.length && !rv.got.length && !rv.miss.length) rv = null; renderReview(); }
-  updBadge();
+  updBadge(); if (CLOUD) updNet();
 }
 $$('#tabbar button').forEach(b => b.onclick = () => show(b.dataset.go));
 function updBadge() { const b = $('#revBadge'); const n = words.filter(w => (w.due || 0) <= Date.now()).length; b.hidden = !n; b.textContent = n; }
@@ -276,7 +376,7 @@ function updBadge() { const b = $('#revBadge'); const n = words.filter(w => (w.d
 function applyTheme() {
   document.body.dataset.theme = S.theme;
   document.documentElement.style.setProperty('--gut', GUT[S.margin] + 'px');
-  document.querySelector('meta[name=theme-color]').content = getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#F6F1E7';
+  /** @type {HTMLMetaElement} */ (document.querySelector('meta[name=theme-color]')).content = getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#F6F1E7';
 }
 
 /* ================= онбординг: уровень ================= */
@@ -305,7 +405,7 @@ $('#keySave').onclick = async () => {
   try {
     if (CLOUD) {
       const typed = $('#keyIn').value.trim();
-      if (typed) { const r = await sb.rpc('set_api_key', { p_key: typed }); if (r.error) throw new Error(/bad key/.test(r.error.message) ? 'Ключ слишком короткий — скопируйте его целиком.' : r.error.message); keyLast4 = typed.slice(-4); }
+      if (typed) { const r = await sb.rpc('set_api_key', { p_key: typed }); if (r.error) throw new Error(/bad key/.test(r.error.message) ? 'Ключ слишком короткий — скопируйте его целиком.' : r.error.message); setK4(typed.slice(-4)); }
       await gemini('Return the JSON {"translation":"ok"}', null, null, null, 25000);
     } else { await gemini('Return the JSON {"translation":"ok"}', null, null, v, 20000); LS.set('lr_key', v); }
     msg.innerHTML = ''; toast('Ключ работает' + (lastRegion ? ' · сервер: ' + (REGION_NAMES[lastRegion] || lastRegion) : '')); show(keyReturn);
@@ -367,10 +467,11 @@ async function geminiInner(prompt, signal, onPartial, key, arm, avoid) {
     if (!session) throw new Error('Сессия истекла. Обновите страницу и войдите заново.');
     const fnUrl = CFG.SUPABASE_URL.replace(/\/+$/, '') + '/functions/v1/translate?forceFunctionRegion=' + encodeURIComponent(CFG.REGION || 'eu-west-3');
     try { r = await fetch(fnUrl, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token, 'apikey': CFG.SUPABASE_KEY }, body: JSON.stringify({ prompt, model: S.model, avoid }) }); }
-    catch (e) { if (e.name === 'AbortError') throw e; throw new Error('Нет связи с сервером перевода. Проверьте интернет.'); }
+    catch (e) { if (e.name === 'AbortError') throw e; setOffline(true); throw Object.assign(new Error('Нет интернета. Перевод заработает, когда связь вернётся; сохранённые переводы и словарь доступны.'), { code: 'offline' }); }
     arm();
     lastRegion = r.headers.get('x-lr-region') || lastRegion; lastModel = r.headers.get('x-lr-model') || lastModel; lastTiming = r.headers.get('server-timing') || '';
-    if (!r.ok) { const d = await r.json().catch(() => ({})); const err = new Error(d.error && d.error.code ? d.error.message : apiError(r.status, d)); if (d.error && d.error.code === 'no_key') err.needKey = true; throw err; }
+    setOffline(false);
+    if (!r.ok) { const d = await r.json().catch(() => ({})); const err = new Error(d.error && d.error.code ? d.error.message : apiError(r.status, d)); if (d.error && d.error.code) err.code = d.error.code; if (err.code === 'no_key') err.needKey = true; throw err; }
     return readStream(r, onPartial, arm);
   }
   if (!key) { const e = new Error('Нужен ключ Gemini: Профиль → Ключ перевода.'); e.needKey = true; throw e; }
@@ -674,7 +775,7 @@ function renderResult(box) {
   box.append(h('button', { class: 'btn big', onclick: () => { startRound('due'); renderReview(); } }, 'Готово'));
 }
 document.addEventListener('keydown', e => {
-  if (current !== 'Review' || !rv || rv.pos >= rv.queue.length || /INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) return;
+  if (current !== 'Review' || !rv || rv.pos >= rv.queue.length || /INPUT|TEXTAREA|SELECT/.test(e.target instanceof Element ? e.target.tagName : '')) return;
   const card = $('#revBox .rv-card'); if (!card) return;
   if (e.key === 'ArrowRight') commit(card, true); else if (e.key === 'ArrowLeft') commit(card, false);
 });
@@ -729,9 +830,10 @@ function renderProfile() {
     row('Ключ перевода', k ? 'Gemini ••••' + k.slice(-4) : 'не задан', () => openKey('Profile')),
     row('Модель', S.model + (lastModel && lastModel !== S.model ? ' (сейчас: ' + lastModel + ')' : ''), () => { const m = prompt('Название модели Gemini', S.model); if (m && m.trim()) { S.model = m.trim(); saveS(); renderProfile(); } }),
     CLOUD && lastRegion ? h('li', null, h('span', { style: 'flex:1;font-size:15px;min-height:44px;display:flex;align-items:center', text: 'Сервер перевода' }), h('span', { class: 'muted', style: 'font-size:14px;padding-right:10px', text: (REGION_NAMES[lastRegion] || lastRegion) })) : null,
+    CLOUD && user ? h('li', null, h('button', { onclick: () => { if (sync.err) toast(sync.err, 5000); sync.err = ''; resync(true); flush(); }, style: 'flex:1;display:flex;align-items:center;gap:12px;min-height:44px;border:0;background:transparent;text-align:left;padding:0' }, h('span', { style: 'flex:1;font-size:15px', text: 'Синхронизация' }), h('span', { class: 'muted', id: 'syncVal', style: 'font-size:14px', text: syncText() }), ico('chev', 18, 'color:var(--muted)'))) : null,
     row('Отчёт для разработчика', 'скопировать', copyTimings),
     row('Версия', String(VER), () => toast('Версия ' + VER)),
-    row('Очистить кэш переводов', Object.keys(cache).length + ' шт.', () => { if (confirm('Очистить сохранённые переводы? Слова в словаре останутся.')) { for (const x in cache) delete cache[x]; LS.set('lr_cache', {}); renderProfile(); } }),
+    row('Очистить кэш переводов', Object.keys(cache).length + ' шт.', () => { if (confirm('Очистить сохранённые переводы? Слова в словаре останутся.')) { tc.clear().then(renderProfile); } }),
     CLOUD && user ? row('Выйти', '', async () => { if (!confirm('Выйти из аккаунта на этом устройстве?')) return; await flush(); await sb.auth.signOut(); }) : null
   );
   const note = $('#profNote');
@@ -755,7 +857,7 @@ async function openBook(b, atCfi) {
   let buf; try { buf = await files.get(b.id); } catch (e) {}
   if (!buf && b.cat) {
     $('#loading').lastChild.textContent = 'Скачиваю книгу…';
-    try { const r = await fetch('catalog/' + b.cat + '.epub'); if (!r.ok) throw new Error(r.status); buf = await r.arrayBuffer(); await files.put(b.id, buf); } catch (e) { console.warn(e); }
+    try { const r = await fetch('catalog/' + b.cat + '.epub'); if (!r.ok) throw new Error(String(r.status)); buf = await r.arrayBuffer(); await files.put(b.id, buf); } catch (e) { console.warn(e); }
     $('#loading').lastChild.textContent = 'Открываю книгу…';
   }
   if (!buf && CLOUD && user && !b.cat) {
@@ -1114,10 +1216,11 @@ async function translate(c) {
     }
     if (!res || !res.translation) throw new Error('Модель ответила неожиданно. Коснитесь слова ещё раз.');
     if (isFull(res)) res._v = 2;
-    if (isFull(res)) { cache[key] = res; const ks = Object.keys(cache); if (ks.length > 1500) ks.slice(0, 300).forEach(k => delete cache[k]); LS.set('lr_cache', cache); }
+    if (isFull(res)) tc.put(key, res);
     if (!signal.aborted && curCtx === c) { cancelAnimationFrame(paintRaf); paint(c, res, true); }
   } catch (e) {
     if (e.name === 'AbortError') return;
+    if (!e.code && !e.needKey) logErr('translate', e);
     if (curCtx !== c) return;
     paintBubble(c, {}, false, e);
     const body = $('#sheetBody'); body.innerHTML = '';
@@ -1181,7 +1284,7 @@ function paintBubble(c, r, done, err) {
       h('button', { class: 'btn dark', onclick: () => { closeBubble(true); openSheet(true); } }, 'Подробнее', ico('chev', 16))));
   placeBubble(c.rect);
 }
-document.addEventListener('pointerdown', e => { if (isBubble() && !bubble.contains(e.target) && !$('#modal').contains(e.target) && !e.target.closest('#viewer')) closeBubble(); });
+document.addEventListener('pointerdown', e => { if (isBubble() && !bubble.contains(e.target) && !$('#modal').contains(e.target) && !(e.target instanceof Element && e.target.closest('#viewer'))) closeBubble(); });
 window.addEventListener('resize', () => { if (isBubble()) closeBubble(); });
 
 /* --- шторка перевода --- */
@@ -1391,7 +1494,7 @@ $('#rSearch').onclick = () => {
 
 /* клавиатура (компьютер) */
 function keyNav(e) {
-  if (current !== 'Reader' || /INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) return;
+  if (current !== 'Reader' || /INPUT|TEXTAREA|SELECT/.test(e.target instanceof Element ? e.target.tagName : '')) return;
   if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') next();
   else if (e.key === 'ArrowLeft' || e.key === 'PageUp') prev();
   else if (e.key === 'Escape') { if (modal.classList.contains('open')) closeModal(); else closeSheet(); }
@@ -1409,23 +1512,36 @@ function nextAfterLogin() {
   else if (!getKey() && !LS.get('lr_skipkey', false)) openKey('Lib');
   else show('Lib');
 }
+const setK4 = v => { keyLast4 = v; LS.set('lr_k4', v); }; // последние 4 знака ключа: помним, чтобы стартовать без ожидания сервера
+// после фоновой загрузки с сервера — обновить то, что на экране
+function afterPull() {
+  updBadge();
+  if (current === 'Lib') renderLib(); else if (current === 'Words') renderWords();
+  if (current !== 'Reader') applyTheme();
+}
 async function afterLogin() {
   if (!user || loggedFor === user.id) return; loggedFor = user.id;
   const prev = LS.get('lr_uid', '');
   if (prev !== user.id) {
     if (prev) { // другой аккаунт на этом устройстве — начинаем с чистого листа
       books = []; words = []; notes = []; marks = []; days = []; S = Object.assign({}, DEF); queue = {};
-      for (const k of ['lr_books', 'lr_words', 'lr_notes', 'lr_marks', 'lr_days', 'lr_s', 'lr_queue', 'lr_skipkey']) localStorage.removeItem(k);
+      for (const k of ['lr_books', 'lr_words', 'lr_notes', 'lr_marks', 'lr_days', 'lr_s', 'lr_queue', 'lr_skipkey', 'lr_syncok', 'lr_k4']) localStorage.removeItem(k);
+      keyLast4 = '';
     }
-    snap = EMPTY_SNAP(); LS.set('lr_uid', user.id);
+    snap = EMPTY_SNAP(); LS.set('lr_uid', user.id); localStorage.removeItem('lr_pulled'); srvAt = {}; localStorage.removeItem('lr_seen');
     diffAll(); // книги и слова из локального режима переезжают в аккаунт
     if (!S.level) { delete queue['set|S']; snap.set = {}; } // пустые настройки нового устройства не должны затирать серверные
     LS.set('lr_queue', queue); LS.set('lr_snap', snap);
   }
-  show('Lib'); $('#bookList').replaceChildren(h('li', { class: 'empty', style: 'display:block;border:0' }, h('span', { class: 'spin' }), '  Загружаю библиотеку…'));
-  const pulling = pull();
-  try { await withTimeout(pulling, 12000); lastPull = Date.now(); } catch (e) { console.warn(e); pulling.then(() => { if (current === 'Lib') renderLib(); updBadge(); }).catch(() => {}); toast('Нет связи с сервером — показываю сохранённое на устройстве', 4000); }
-  try { const r = await withTimeout(sb.rpc('get_key_status'), 8000); keyLast4 = (r.data && r.data[0] && r.data[0].last4) || ''; } catch (e) {}
+  // на этом устройстве с сервера ещё ничего не брали — ждём его; иначе сразу показываем сохранённое, а свежее подтянется следом
+  const first = !LS.get('lr_pulled', null);
+  if (!keyLast4) keyLast4 = LS.get('lr_k4', '');
+  const keyNow = withTimeout(sb.rpc('get_key_status'), 8000).then(r => { if (!r.error) setK4((r.data && r.data[0] && r.data[0].last4) || ''); }).catch(() => {});
+  const raw = pull();
+  raw.then(() => { lastPull = Date.now(); if (!first) afterPull(); }).catch(() => {});
+  const pulling = withTimeout(raw, 8000).catch(e => { if (isNetErr(e)) setOffline(true); });
+  if (first) { show('Lib'); $('#bookList').replaceChildren(h('li', { class: 'empty', style: 'display:block;border:0' }, h('span', { class: 'spin' }), '  Загружаю библиотеку…')); await pulling; }
+  if (first || !keyLast4) await keyNow;
   applyTheme(); ensureUploads();
   nextAfterLogin();
 }
@@ -1435,40 +1551,52 @@ $('#btnGoogle').onclick = async () => {
   if (r.error) $('#loginMsg').replaceChildren(h('div', { class: 'err', text: r.error.message }));
 };
 function withTimeout(p, ms) { return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]); }
+// запуск без сети: работаем с тем, что на устройстве, под прежним аккаунтом; настоящий вход — когда связь вернётся
 function offlineStart() {
   user = { id: LS.get('lr_uid', '') }; loggedFor = user.id;
-  applyTheme(); show('Lib');
-  toast('Нет связи с сервером. Скачанные книги доступны, перевод и синхронизация — когда связь вернётся', 6000);
+  applyTheme(); sync.offline = false; setOffline(true); show('Lib');
+}
+// связь вернулась после запуска без сети: берём настоящую сессию
+let upgrading = false;
+async function upgradeSession() {
+  if (!CLOUD || !user || user.email || upgrading) return;
+  upgrading = true;
+  try {
+    const r = await withTimeout(sb.auth.getSession(), 8000);
+    const ses = r.data.session;
+    if (ses && ses.user.id === user.id) {
+      user = ses.user; loggedFor = user.id; updNet(); ensureUploads(); flush(); resync(true);
+      try { const k = await withTimeout(sb.rpc('get_key_status'), 8000); if (!k.error) setK4((k.data && k.data[0] && k.data[0].last4) || ''); } catch (e) {}
+    } else if (!ses && !r.error) { user = null; loggedFor = ''; show('Login'); } // вход истёк: войти заново (неотправленное ждёт на устройстве)
+  } catch (e) {} finally { upgrading = false; }
 }
 async function boot() {
   if (!CLOUD) { nextAfterLogin(); return; }
   sb.auth.onAuthStateChange((ev, sess) => {
-    if (ev === 'SIGNED_OUT') { user = null; loggedFor = ''; keyLast4 = ''; show('Login'); return; }
+    if (ev === 'SIGNED_OUT') { user = null; loggedFor = ''; setK4(''); setOffline(false); show('Login'); return; }
+    if (sess && sess.user && user && !user.email && user.id === sess.user.id) { setTimeout(upgradeSession, 0); return; }
     if (sess && sess.user && (!user || user.id !== sess.user.id)) { user = sess.user; setTimeout(afterLogin, 0); }
   });
-  let session = null, timedOut = false;
-  try { session = (await withTimeout(sb.auth.getSession(), 7000)).data.session; } catch (e) { timedOut = e && e.message === 'timeout'; }
+  let session = null, failed = false;
+  try { const r = await withTimeout(sb.auth.getSession(), 7000); session = r.data.session; failed = !!r.error; } catch (e) { failed = true; }
   if (session) { user = session.user; await afterLogin(); return; }
-  if (timedOut && LS.get('lr_uid', '')) { offlineStart(); return; } // сервер не отвечает — работаем с тем, что на устройстве
+  if ((failed || !navigator.onLine) && LS.get('lr_uid', '')) { offlineStart(); return; } // сервер не отвечает — работаем с тем, что на устройстве
   const qs = new URLSearchParams(location.search + '&' + location.hash.replace(/^#/, ''));
   show('Login');
   if (qs.get('error_description')) $('#loginMsg').replaceChildren(h('div', { class: 'err', text: 'Вход не удался: ' + qs.get('error_description') }));
   if (qs.get('code')) $('#loginMsg').replaceChildren(h('div', { class: 'muted' }, h('span', { class: 'spin' }), '  Входим…'));
 }
-addEventListener('online', () => flush());
 /* --- вернулись на вкладку: забираем свежее с сервера. Телефон держит сайт в фоне сутками, и без этого показывал бы старое --- */
 let lastPull = Date.now(), resyncing = false;
-async function resync() {
-  if (!CLOUD || !user || !user.email || loggedFor !== user.id || resyncing || Date.now() - lastPull < 15000) return;
+async function resync(force) {
+  if (CLOUD && user && !user.email) { upgradeSession(); return; }
+  if (!CLOUD || !user || loggedFor !== user.id || resyncing || (!force && Date.now() - lastPull < 15000)) return;
   resyncing = true; saveNow();
   const rd = current === 'Reader' && curBook && rendition ? { id: curBook.id, cfi: curBook.cfi, t: curBook.lastRead || 0, r: rendition } : null;
   try { await withTimeout(pull(), 12000); lastPull = Date.now(); }
   catch (e) { console.warn('resync', e); return; }
   finally { resyncing = false; }
-  updBadge();
-  if (current === 'Lib') renderLib();
-  else if (current === 'Words') renderWords();
-  if (current !== 'Reader') applyTheme();
+  afterPull();
   // в этой же книге на другом устройстве прочитано дальше — встаём туда
   if (rd && current === 'Reader' && rendition === rd.r) {
     const live = books.find(x => x.id === rd.id);
@@ -1481,10 +1609,13 @@ async function resync() {
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') resync(); });
 addEventListener('pageshow', e => { if (e.persisted) resync(); });
 addEventListener('focus', () => resync());
+addEventListener('online', () => resync(true));
+addEventListener('offline', () => { if (CLOUD && user) setOffline(true); });
+setInterval(() => { if (sync.offline && document.visibilityState === 'visible') resync(true); }, 30000); // без сети: раз в полминуты проверяем, не вернулась ли
 const saveNow = () => { if (progT) { clearTimeout(progT); progT = null; saveBooks(); } };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { saveNow(); flush(); } });
 addEventListener('pagehide', saveNow);
 boot();
 $('#keySkip').addEventListener('click', () => LS.set('lr_skipkey', true));
-window.__lr = { get rendition() { return rendition; }, get book() { return book; }, S, timings };
+window.__lr = { get rendition() { return rendition; }, get book() { return book; }, S, timings, sync, get queue() { return queue; }, get user() { return user; } };
 })();
